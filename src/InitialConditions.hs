@@ -108,12 +108,13 @@ parserTheory :: MyParser () (TheoryLevel,String)
 parserTheory = option (Unspecified,"Unspecified") $ do
   spaces 
   try (string "Theory") <|> try (string "theory")
+  spaces >> char '=' >> spaces
   theory  <- parseLevel
   basis   <- manyTill anyChar space
   anyLine
   return (theory,basis)
   
-  where parseLevel = try parserCasMolcas <|> try parserHF <?> "unknown theory level"
+  where parseLevel = try parserCasMolcas <|> try parserHF <?> "theory level"
         parserHF   = do
                     try (string "HF") <|>  try (string "hf")
                     return HF

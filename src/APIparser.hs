@@ -10,6 +10,7 @@ import Control.Lens
 import Control.Monad 
 import Data.Array.Repa as R hiding ((++))
 import qualified Data.ByteString.Char8 as C
+import qualified Data.ByteString.Lex.Double as L
 import Data.Complex
 import Data.Either (lefts)
 import Data.List as DL
@@ -190,24 +191,24 @@ launchPalmeiro :: Molecule -> IO Molecule
 launchPalmeiro mol =  do
    ctl <- getSuffixFile "." ".ctl"
    conex <- parserFileInternasCtl ctl
-   writePalmeiroScript $ calcInternals conex
+   writePalmeiroScript $ calcInternals conex mol
    launchJob "gfortran -o PalmeiroScript.o PalmeiroScript.f90"
    launchJob "chmod u+x PalmeiroScript.o"
    launchJob "./PalmeiroScript.o"
    gradInter <- readVectorUnboxed "Gradient.out"
-   grad <- transform2Cart gradInter
-   let dim   = VU.length grad
-       force = R.fromUnboxed (Z:. dim) $ VU.map negate grad
+   grad      <- transform2Cart conex gradInter $ mol ^. getCoord
+   let force = R.computeUnboxedS $  R.map negate grad
    return $ mol & getForce .~ force 
    
-parserFileInternasCtl :: FilePath -> IO Conex
+parserFileInternasCtl :: FilePath -> IO Connections
 parserFileInternasCtl = undefined
    
-getSuffixFile ::  FilePath -> String -> IO (Maybe FilePath)
+getSuffixFile ::  FilePath -> String -> IO FilePath
 getSuffixFile path suff = do
   xs <- (filter (`notElem` [".",".."])) <$> (getDirectoryContents path)
   let ctl = head $ filter (isSuffixOf suff) xs
-  return $ if null ctl then Nothing else return ctl
+  return $ if null ctl then error "no .ctl file found" 
+		       else ctl
   
 -- =======================> Molcas <============
 
@@ -459,14 +460,14 @@ calcElectSt mol =
 
 
 readVectorUnboxed :: FilePath -> IO (VU.Vector Double)
-readVectorUnboxed file = L.readFile file >>= \s -> return $ parseUnboxed s
+readVectorUnboxed file = C.readFile file >>= \s -> return $ parseUnboxed s
 
-parseUnboxed :: L.ByteString -> VU.Vector Double
+parseUnboxed ::C.ByteString -> VU.Vector Double
 parseUnboxed = VU.unfoldr step
   where
      step !s = case L.readDouble s of
         Nothing       -> Nothing
-        Just (!k, !t) -> Just (k, L.tail t)         
+        Just (!k, !t) -> Just (k, C.tail t)         
         
 -- =============================> <===============================
 printGnuplot :: MatrixCmplx -> Molecule -> IO ()

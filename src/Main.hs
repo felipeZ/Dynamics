@@ -124,11 +124,9 @@ printFiles opts@Options { optInput = files, optDataDir = datadir } = do
 processPrueba :: Options -> IO ()
 processPrueba opts = do
   let temp = fromMaybe 298 $ optTemperature opts
-      files@[xyz,molcas,input] =  optInput opts
+      files@[input] =  optInput opts
   initData <- parseFileInput parseInput input
-  let getter = (initData ^.)
-  r <- parseMolcasInputFile molcas
-  writeFile "outPrueba" $ concatMap show r
+  print initData
 
 
 
