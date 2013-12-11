@@ -277,28 +277,5 @@ parseConnections file = do
 atom2Mass :: M.Map String Double 
 atom2Mass = M.fromList [("H",1.00782504),("C",12.0),("N",14.0),("O",16.0)]
   
--- readArrayDIM1FIle :: FilePath -> IO (Array U DIM1 Double)
--- readArrayDIM1FIle file = do
---    vs <- readVectorFromFile file
---    return $ R.fromUnboxed (Z:. VU.length vs) vs
--- 
--- readArrayDIM2FIle :: FilePath -> IO (Array U DIM2 Double)
--- readArrayDIM2FIle file = do
---    vs <- readVectorFromFile file
---    let dim = VU.length vs
---    return $ R.fromUnboxed (Z:. dim :. dim) vs
---    
---   
--- readVectorFromFile :: FilePath -> IO (VU.Vector Double)
--- readVectorFromFile file = do  
---     s   <- L.readFile file
---     return $ parseL s
---  
--- -- Fill a new vector from a file containing a list of numbers.
--- parseL :: L.ByteString -> VU.Vector Double
--- parseL = VU.unfoldr step
---   where
---      step !s = case L.readDouble s of
---         Nothing       -> Nothing
---         Just (!k, !t) -> Just (k, L.tail t)  
+
 

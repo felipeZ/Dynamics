@@ -5,6 +5,7 @@ module InternalCoordinates (
                            angle
                           ,bond
                           ,calcInternals
+                          ,chunks
                           ,dihedral
                           ,transform2Cart
                            ) where
@@ -15,6 +16,7 @@ import Control.Lens
 import Control.Parallel.Strategies (parMap,rseq)
 import Data.Array.Repa as R hiding ((++))
 import Data.List as DL
+import Data.Maybe (fromMaybe)
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as VU
 
@@ -33,7 +35,7 @@ calcInternals conex mol =  VU.generate dim fun
   where vu    = mol ^. getCoord . to R.toUnboxed
         vss   = chunks 3 vu
 	dim   = V.length conex
-	ind x = vss V.! (pred x ) -- atomic index begins at 1  
+	ind x = vss V.! x 
         fun x = case (conex V.! x) of
                      Bond     a b     -> bond     (ind a) (ind b) 
                      Angle    a b c   -> angle    (ind a) (ind b) (ind c)
@@ -45,7 +47,7 @@ transform2Cart conex gradInt cart = do
         dim       = VU.length gradInt
         numat     = V.length xss
         wilsonMtx = calcWilson conex numat $ xss 
-    wilsonT   <- transpose2P wilsonMtx    
+    wilsonT   <- transpose2P wilsonMtx 
     gradCart <- mmultP wilsonT $ R.fromUnboxed (Z:. dim :. 1) gradInt
     computeUnboxedP $ R.reshape (Z :. 3*numat) gradCart
         
@@ -60,16 +62,17 @@ calcWilson conex numat vss = R.fromUnboxed (Z :. dimInt :.dimCart) $ VU.concat $
 calcDerv :: V.Vector VD -> Int -> InternalCoord -> VD
 calcDerv vss numat q = VU.concat $ fmap filler [0..pred numat]
 
-  where ind x    = vss V.! (pred x ) -- atomic index begins at 1    
-        zeros    = VU.generate 3 $ const 0 
-        filler x = if x`elem` ixs then dervs !! x else zeros 
+  where ind x    = vss V.! x 
+        zeros    = VU.generate 3 $ const 0
+        look     = fromMaybe (error "There was a problem calculating the Wilson matrix") . flip DL.lookup dervs
+        filler x = if x`elem` ixs then look x else zeros 
         (ixs,dervs) = case q of
-                        Bond     a b     -> let xs = pred <$> [a,b]
-                                            in(xs,derv_bond (ind a) (ind b)) 
-                        Angle    a b c   -> let xs = pred <$> [a,b,c]
-                                            in (xs,derv_angle (ind a) (ind b) (ind c))                                           
-                        Dihedral a b c d -> let xs = pred <$> [a,b,c,d]
-                                            in (xs,derv_dih (ind a) (ind b) (ind c) (ind d)) 
+                        Bond     a b     -> let xs = [a,b]
+                                            in (xs, zip xs $ derv_bond (ind a) (ind b)) 
+                        Angle    a b c   -> let xs = [a,b,c]
+                                            in (xs,zip xs $ derv_angle (ind a) (ind b) (ind c))                                           
+                        Dihedral a b c d -> let xs = [a,b,c,d]
+                                            in (xs,zip xs $ derv_dih (ind a) (ind b) (ind c) (ind d)) 
                      
                        
 -- =============> <==================
@@ -160,9 +163,12 @@ derv_dih a b c d = [da,db,dc,dd]
 -- ================> Utilities <=====================    
   
 chunks :: Int -> VD ->  V.Vector VD
-chunks n v = V.map (\x -> VU.backpermute v $ VU.generate n $ \y -> n*x +y ) ixs
-  where dim = (VU.length v) `div` n
-        ixs = V.generate dim id
+chunks n v = v1 V.++  v2 
+  where v1 = V.map (\x -> VU.backpermute v $ VU.generate n $ \y -> n*x +y ) ixs
+        v2 = if r == 0 then V.empty else V.singleton $ VU.backpermute v $ VU.generate r $ \i -> (n*q) + i
+        len = VU.length v
+        (q,r) = quotRem len n
+        ixs = V.generate q id
         
 
         

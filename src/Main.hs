@@ -20,7 +20,6 @@ import System.Cmd ( system )
 import System.Console.GetOpt
 import Text.Printf
 
-
 -- Cabal imports
 import Data.Version (showVersion)
 import Distribution.Version
@@ -33,6 +32,7 @@ import Constants
 import ConstrainOptimization
 import Dynamics
 import InitialConditions
+import InternalCoordinates
 import Gaussian
 import Molcas
 import OptsCheck
@@ -48,7 +48,7 @@ authors = "@2013  Felipe Zapata, Alessio Valentini, Angel Alvarez"
 -- default options
 defaultOptions    = Options
  { optDump        = False
- , optModules     = [("constrained",processConstrained),("externalForces",processExternalForces),("molcas",processMolcas),("molcasTinker",processMolcasTinker),("molcasZeroVel",processMolcasZeroVelocity),("prueba",processPrueba)]
+ , optModules     = [("constrained",processConstrained),("externalForces",processExternalForces),("molcas",processMolcas),("palmeiro",processPalmeiro),("molcasTinker",processMolcasTinker),("molcasZeroVel",processMolcasZeroVelocity),("prueba",processPrueba)]
  , optMode        = Nothing
  , optVerbose     = False
  , optShowVersion = False
@@ -122,13 +122,15 @@ printFiles opts@Options { optInput = files, optDataDir = datadir } = do
 -- =============> Drivers to run the molecular dynamics simulations in Molcas <==============
 
 processPrueba :: Options -> IO ()
-processPrueba opts = do
+processPrueba opts =   do
   let temp = fromMaybe 298 $ optTemperature opts
-      files@[ctl] =  optInput opts
+      files@[xyz,ctl,input] =  optInput opts
   ctl <- getSuffixFile "." ".ctl"
   conex <- parserFileInternasCtl ctl
-  print conex
-
+  initData <- parseFileInput parseInput input
+  let getter   = (initData ^.)
+  initialMol  <- initializeMolcasOntheFly xyz (getter getInitialState) temp
+  print initialMol
 
 
 processMolcas :: Options -> IO ()
@@ -208,17 +210,22 @@ processPalmeiro opts = do
   initData <- parseFileInput parseInput input
   let getter = (initData ^.)
   initialMol  <- initializeMolcasOntheFly xyz (getter getInitialState) temp
+  ctl         <- getSuffixFile "." ".ctl"
+  conex       <- parserFileInternasCtl ctl
   let numat = initialMol ^. getAtoms . to length
       [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
       thermo        = initializeThermo numat temp
-      job           = Palmeiro
-  palmeiroLoop initialMol audt temp thermo job ""
+      job           = Palmeiro conex ["/S0","/S1"]
+  palmeiroLoop initialMol audt temp thermo job "" 1
   
-palmeiroLoop :: Molecule -> DT -> Temperature -> Thermo -> Job -> String -> IO ()
-palmeiroLoop  mol dt t thermo job project = 
+palmeiroLoop :: Molecule -> DT -> Temperature -> Thermo -> Job -> String -> Step -> IO ()
+palmeiroLoop  mol dt t thermo job project step = 
     if t > 0 then do
-                  (newMol,newThermo) <- dynamicNoseHoover mol dt t thermo job project                       
-                  palmeiroLoop newMol dt (t - dt) newThermo job project
+                  (newMol,newThermo) <- dynamicNoseHoover mol dt t thermo job project  
+                  printMol  newMol ""
+                  printData newMol step
+                  return ()
+--                   palmeiroLoop newMol dt (t - dt) newThermo job project (succ step)
              else return ()
 
 -- =============> Drivers to run the molecular dynamics simulations in Gaussian <==============

@@ -100,7 +100,7 @@ interactWith job project mol =
                             launchGaussian input
                             updateMultiStates out mol
                             
-     Palmeiro ->  launchPalmeiro mol
+     Palmeiro conex dirs ->  launchPalmeiro conex dirs mol
        
                              
      Quadratic -> return $ calcgradQuadratic mol
@@ -188,19 +188,32 @@ modifyTinkerNames project = renameFile (root ++ "_2") root
         
         
 -- ======================> Palmeiro <==============
-launchPalmeiro :: Molecule -> IO Molecule
-launchPalmeiro mol =  do
-   ctl <- getSuffixFile "." ".ctl"
-   conex <- parserFileInternasCtl ctl
-   writePalmeiroScript $ calcInternals conex mol
-   launchJob "gfortran  Tools.f90 Diag.f90 CartToInt2.f90 FitSurfMN_linux3.f90 PalmeiroScript.f90 -o PalmeiroScript.o -L/usr/lib64/ -llapack -lblas"
-   launchJob "chmod u+x PalmeiroScript.o"
-   launchJob "./PalmeiroScript.o"
-   gradInter <- readVectorUnboxed "Gradient.out"
-   grad      <- transform2Cart conex gradInter $ mol ^. getCoord
-   let force = R.computeUnboxedS $  R.map negate grad
-   return $ mol & getForce .~ force 
-   
+launchPalmeiro :: Connections -> [FilePath] -> Molecule -> IO Molecule
+launchPalmeiro conex dirs mol =  do
+   let internals = calcInternals conex mol
+       carts     =  mol ^. getCoord
+   (es,fss) <- unzip `fmap` (parallelLaunch $ fmap (interpolation conex internals carts) dirs)
+   let st    = calcElectSt mol 
+       force = fss !! st
+   return $ mol & getForce  .~ force 
+                & getEnergy .~ [es]
+  
+-- Because Palmeiro set of Utilities required a Directory for each electronic state then
+-- there are created as many directories as electronic states involved 
+interpolation :: Connections -> Internals -> Coordinates -> FilePath -> IO (Energy,Force)  
+interpolation conex qs carts dir = do
+  pwd <- getCurrentDirectory
+  setCurrentDirectory $ pwd ++ dir
+  writePalmeiroScript qs
+  launchJob "gfortran  Tools.f90 Diag.f90 CartToInt2.f90 FitSurfMN_linux3.f90 PalmeiroScript.f90 -o PalmeiroScript.o -L/usr/lib64/ -llapack -lblas"
+  launchJob "chmod u+x PalmeiroScript.o"
+  launchJob "./PalmeiroScript.o"
+  gradInter <- readVectorUnboxed "Gradient.out"
+  energy    <- (head . VU.toList) `fmap` readVectorUnboxed "Energy.out"
+  grad      <- transform2Cart conex gradInter carts 
+  let force = R.computeUnboxedS $  R.map negate grad
+  return (energy,force)
+
 parserFileInternasCtl :: FilePath -> IO Connections
 parserFileInternasCtl name = do
   r <- parseFromFile parserCtl name
@@ -442,7 +455,7 @@ parseQ :: Int ->  MyParser st InternalCoord
 parseQ !n = do 
            xs <- count n (spaces >> intNumber)
            anyLine
-           let getIndex x = pred (xs !! x)
+           let getIndex x = pred (xs !! x)  -- atomic index begins at 1  
            case n of 
                 2 -> return $ Bond     (getIndex 0) (getIndex 1)
                 3 -> return $ Angle    (getIndex 0) (getIndex 1) (getIndex 2)
@@ -483,9 +496,11 @@ readVectorUnboxed file = C.readFile file >>= \s -> return $ parseUnboxed s
 parseUnboxed ::C.ByteString -> VU.Vector Double
 parseUnboxed = VU.unfoldr step
   where
-     step !s = case L.readDouble s of
-        Nothing       -> Nothing
-        Just (!k, !t) -> Just (k, C.tail t)         
+    isspace x = if x == ' ' then True else False     
+    step !s = let b = C.dropWhile isspace s
+              in case L.readDouble b of
+                 Nothing       -> Nothing
+                 Just (!k, !t) -> Just (k, C.tail t)         
         
 -- =============================> <===============================
 printGnuplot :: MatrixCmplx -> Molecule -> IO ()
@@ -505,18 +520,27 @@ writePalmeiroScript :: Internals -> IO ()
 writePalmeiroScript qs = do
   let spaces = concat $ replicate 5 " "
       inpQ = spaces ++ (writeInternasFortran qs)
-      l1 = concatMap (spaces++) ["Program FittingToSurface\n","Use MultiNodalFitSurf\n","Implicit None\n","Real(kind=8),allocatable :: Inpq(:),g(:),H(:)\n","Real(kind=8) :: E\n","Integer IErr,NumberCoord\n","Logical :: NewSimplex\n\n"]
-      l2 = spaces ++ "NumberCoord="++ (show $ VU.length qs) ++ "\n\n"
+      l1 = concatMap (spaces++) ["Program FittingToSurface\n","Use MultiNodalFitSurf\n","Implicit None\n","Real(kind=8),allocatable :: Inpq(:),g(:),H(:)\n","Real(kind=8) :: E\n","Integer i,IErr,NumberCoord\n","Logical :: NewSimplex\n\n"]
+      dim = (show $ VU.length qs)
+      l2 = spaces ++ "NumberCoord="++ dim ++ "\n\n"
       l3 = concatMap (spaces++) ["Call ReadDataFiles('./',.True.,IErr)\n\n","Allocate(Inpq(1:NumberCoord),g(1:NumberCoord),H(1:NumberCoord*(NumberCoord+1)/2))\n"]      
-      l4 = concatMap (spaces++) ["Call InterpolatePES(Inpq,IErr,NewSimplex,E,g,H)\n", "If (IErr>0) Print *,'InterpolatePES Has FAILED!.'\n", "Print *, 'Gradient'\n", "open (unit=112, file='Gradient.out',status='replace',action='write')\n","Write(unit=112,fmt=*) g\n"," close(unit=112)\n\n"," End Program\n"]
-  writeFile "PalmeiroScript.f90" $  l1 ++ l2 ++ l3 ++ inpQ
+      l4 = concatMap (spaces++) ["Call InterpolatePES(Inpq,IErr,NewSimplex,E,g,H)\n", "If (IErr>0) Print *,'InterpolatePES Has FAILED!.'\n", "Print *, 'Gradient'\n",
+                                 "open (unit=112, file='Gradient.out',status='replace',action='write')\n",
+                                 "open (unit=113, file='Energy.out',status='replace',action='write')\n",
+                                 "write(unit=112,fmt=*)  (real(g(i)) ,i=1," ++ dim ++ ")\n",                                 
+                                 "write(unit=113,fmt=*) (real(E))\n",
+                                 "close(unit=112)\n",
+                                 "close(unit=113)\n\n","End Program\n"]
+  writeFile "PalmeiroScript.f90" $  l1 ++ l2 ++ l3 ++ inpQ ++ l4
       
 writeInternasFortran :: Internals -> String
 writeInternasFortran qs = 
-  let xss = chunksOf 8 . init . concatMap (printf "%2.6f,") $ VU.toList qs
-      blocks = foldl1' fun xss
-      fun acc v = acc ++ "&\n&" ++ v
-  in "Inpq=(/" ++ blocks ++ "\\)\n\n"
+  let {-xss = chunksOf 8 . init . concatMap (printf "%2.6f,") $ VU.toList qs-}
+      spaces    = concat $ replicate 5 " "
+      (hs:tss)  = chunksOf 8 . fmap (printf "%2.6f,") $ VU.toList qs
+      blocks    = foldl' fun (DL.concat hs) tss
+      fun acc v = acc ++ "&\n" ++ spaces ++ "&" ++ DL.concat v
+  in "Inpq=(/" ++ (init blocks) ++ "/)\n\n"  -- init remove the last ","
   
   
 writeMolcasXYZ :: FilePath -> Molecule -> IO ()

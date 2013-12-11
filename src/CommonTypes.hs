@@ -41,13 +41,14 @@ instance Show (MolcasInput String) where
   show (Alaska  x)    = "&Alaska\n"  ++ x
  
 data Job = Gaussian (TheoryLevel,Basis) | Interpolation | Molcas [MolcasInput String] | MolcasTinker [(Label,Int)] Command 
-          | Palmeiro |Quadratic | HaskellAbInitio deriving Show 
+          | Palmeiro Connections [FilePath]|Quadratic | HaskellAbInitio deriving Show 
 
 -- Internal Coordinates types 
 data  InternalCoord = Bond !Int !Int | Angle !Int !Int !Int | Dihedral !Int !Int ! Int !Int deriving Show                          
 type Connections = V.Vector InternalCoord
-type Grad = Array U DIM1 Double
-type Hess = Array U DIM2 Double
+type Force     = Array U DIM1 Double 
+type Grad      = Array U DIM1 Double
+type Hess      = Array U DIM2 Double
 type Internals = VU.Vector Double  
 
 type Anchor      = [Int]
