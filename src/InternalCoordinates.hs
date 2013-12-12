@@ -134,12 +134,12 @@ derv_angle a b c = [vecsum a1 a2,vecsub b1 b2, vecsum c1 c2]
         f2      = recip $ tan teta
         a1      = VU.map (*f1) d1
         a2      = VU.map (*(f2/r1^2)) d2
-        b1      = let x = VU.map (negate . (*(f1/r1^2))) d2 
+        b1      = let x = VU.map (negate . (*(f2/r1^2))) d2 
                       y = VU.map (/r2^2) d1
                   in vecsum x y
         b2      = VU.map (*f1) d3 
         c1      = VU.map (negate . (*f1)) d2
-        c2      = VU.map (negate . (*(f1/r2^2))) d1
+        c2      = VU.map (negate . (*(f2/r2^2))) d1        
 
 derv_dih :: VD -> VD -> VD -> VD -> [VD]
 derv_dih a b c d = [da,db,dc,dd]
@@ -159,7 +159,7 @@ derv_dih a b c d = [da,db,dc,dd]
         db = vecsub (vecScalar da p1) (vecScalar dd p2)
         dc = vecsub (vecScalar dd p3) (vecScalar da p4)
         dd = VU.map (negate . (*(r2/om2))) vxw
-
+      
 -- ================> Utilities <=====================    
   
 chunks :: Int -> VD ->  V.Vector VD

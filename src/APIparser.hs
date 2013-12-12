@@ -192,11 +192,10 @@ launchPalmeiro :: Connections -> [FilePath] -> Molecule -> IO Molecule
 launchPalmeiro conex dirs mol =  do
    let internals = calcInternals conex mol
        carts     =  mol ^. getCoord
-   (es,fss) <- unzip `fmap` (parallelLaunch $ fmap (interpolation conex internals carts) dirs)
-   let st    = calcElectSt mol 
-       force = fss !! st
-   return $ mol & getForce  .~ force 
-                & getEnergy .~ [es]
+   (e1,f1) <- interpolation conex internals carts (dirs !! 0)
+   (e2,f2) <- interpolation conex internals carts (dirs !! 1)
+   return $ mol & getForce  .~ f1 
+                & getEnergy .~ [[e1,e2]]
   
 -- Because Palmeiro set of Utilities required a Directory for each electronic state then
 -- there are created as many directories as electronic states involved 
@@ -204,14 +203,17 @@ interpolation :: Connections -> Internals -> Coordinates -> FilePath -> IO (Ener
 interpolation conex qs carts dir = do
   pwd <- getCurrentDirectory
   setCurrentDirectory $ pwd ++ dir
+  print $ "Current Directory" ++ pwd ++ dir
   writePalmeiroScript qs
   launchJob "gfortran  Tools.f90 Diag.f90 CartToInt2.f90 FitSurfMN_linux3.f90 PalmeiroScript.f90 -o PalmeiroScript.o -L/usr/lib64/ -llapack -lblas"
   launchJob "chmod u+x PalmeiroScript.o"
-  launchJob "./PalmeiroScript.o"
+  launchJob "./PalmeiroScript.o > /dev/null 2>&1 "
   gradInter <- readVectorUnboxed "Gradient.out"
   energy    <- (head . VU.toList) `fmap` readVectorUnboxed "Energy.out"
   grad      <- transform2Cart conex gradInter carts 
   let force = R.computeUnboxedS $  R.map negate grad
+  setCurrentDirectory pwd
+  print gradInter
   return (energy,force)
 
 parserFileInternasCtl :: FilePath -> IO Connections

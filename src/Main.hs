@@ -219,7 +219,8 @@ processPalmeiro opts = do
   palmeiroLoop initialMol audt temp thermo job "" 1
   
 palmeiroLoop :: Molecule -> DT -> Temperature -> Thermo -> Job -> String -> Step -> IO ()
-palmeiroLoop  mol dt t thermo job project step = 
+palmeiroLoop  mol dt t thermo job project step = do
+    print $ "Step: " ++ show step
     if t > 0 then do
                   (newMol,newThermo) <- dynamicNoseHoover mol dt t thermo job project  
                   printMol  newMol ""
