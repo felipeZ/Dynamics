@@ -130,7 +130,8 @@ processPrueba opts =   do
   initData <- parseFileInput parseInput input
   let getter   = (initData ^.)
   initialMol  <- initializeMolcasOntheFly xyz (getter getInitialState) temp
-  print initialMol
+  let ints = calcInternals conex initialMol
+  print ints
 
 
 processMolcas :: Options -> IO ()
@@ -185,9 +186,9 @@ processMolcasTinker opts = do
       thermo = initializeThermo numat temp
       [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
       step = 1
-      tinkerCommand = "prueba"
-      job = MolcasTinker atomsQM tinkerCommand
-  print initialMol
+      job = MolcasTinker atomsQM 
+  mol <- interactWith job project initialMol      
+  print mol
 --   driverMolcasTinker initialMol audt auTime thermo job project step
    
 driverMolcasTinker :: Molecule -> DT -> Temperature -> Thermo -> Job -> String  -> Step -> IO ()  

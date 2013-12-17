@@ -40,7 +40,7 @@ instance Show (MolcasInput String) where
   show (MCLR    x)    = "&Mclr\n"   ++ x
   show (Alaska  x)    = "&Alaska\n"  ++ x
  
-data Job = Gaussian (TheoryLevel,Basis) | Interpolation | Molcas [MolcasInput String] | MolcasTinker [(Label,Int)] Command 
+data Job = Gaussian (TheoryLevel,Basis) | Interpolation | Molcas [MolcasInput String] | MolcasTinker [(Label,Int)]  
           | Palmeiro Connections [FilePath]|Quadratic | HaskellAbInitio deriving Show 
 
 -- Internal Coordinates types 

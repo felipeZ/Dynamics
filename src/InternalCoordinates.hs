@@ -95,6 +95,7 @@ vecsub !v1 !v2 = VU.zipWith (-) v1 v2
 dif2 :: VD -> VD -> VD -> Double
 dif2 !p1 !p2 !p3 =  (p1 `vecsub` p2) `vecdot` (p3 `vecsub` p2)
 
+
 vecScalar :: VD -> Double -> VD
 vecScalar vd s = VU.map (*s) vd
 
@@ -113,8 +114,7 @@ dihedral !p1 !p2 !p3 !p4  =
       [n1,n2] = fmap vecnorm [w1,w2]
       teta = acos $ ((w1 `vecdot` w2) / (n1*n2))
   in if  (signum  $ w2 `vecdot` xba) > 0.0  then teta else -teta
-  
-  
+
 -- ===========>  Internal Coordinates derivatives <======================
 
 derv_bond :: VD -> VD -> [VD]

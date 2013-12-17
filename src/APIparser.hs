@@ -85,20 +85,26 @@ interactWith job project mol =
                  launchMolcas project
                  parseMolcas project ["Grad","Roots"] mol
                  
-     MolcasTinker atomsQM tinkerPath -> do 
-                          reWriteXYZtinker mol atomsQM tinkerPath project
-                          launchTinker tinkerPath 
-                          modifyTinkerNames project
-                          launchMolcas project
-                          parseMolcas project ["GradESPF"] mol
+     MolcasTinker atomsQM -> do 
+                 print "rewrite XYZ file"
+                 reWriteXYZtinker mol atomsQM project
+                 print "Launching"
+                 launchTinker project
+                 print "modifyTinkerNames"
+                 modifyTinkerNames project
+                 print "launch Molcas"
+                 launchMolcas project
+                 print "Parsing Molcas output"
+                 parseMolcas project ["GradESPF"] mol
                                                                       
                  
      Gaussian tupleTheory -> do 
-                            let input  = project ++ ".com"
-                                out    = project ++ ".log"        
-                            writeGaussJob tupleTheory project mol 
-                            launchGaussian input
-                            updateMultiStates out mol
+                 let input  = project ++ ".com"
+                     out    = project ++ ".log"        
+                 writeGaussJob tupleTheory project mol 
+                 launchGaussian input
+--                  launchJob $ "g09 " ++ input
+                 updateMultiStates out mol
                             
      Palmeiro conex dirs ->  launchPalmeiro conex dirs mol
        
@@ -177,8 +183,13 @@ updateGaussianInput theory rlxroot =
             otherwise       -> theory
                 
 -- =======================> Tinker <===========                                                
-launchTinker :: Command -> IO ()
-launchTinker = undefined
+launchTinker :: String -> IO ()
+launchTinker project = do
+   let root   ="/home/marco/7.8.dev/tinker-5.1.09/source/optimize.x "
+       name   = project ++ ".xyz"
+       suffix = " 0.1 > /dev/null 2>&1"
+       job = root ++ name ++ suffix
+   launchJob job
 
 -- | Tinker does not overwrite the .xyz, instead it writes thew new geometry optimization 
 --   in a file ended in .xyz_2
@@ -560,7 +571,7 @@ writeGaussJob (theory,basis) project mol =  do
   name <- getLoginName   
   let Left elecSt = mol^.getElecSt
       gaussTheoryLevel = show $ writeCurrentRoot mol theory
-      l1 = addNewLines 1 $ "%chk=" ++ project ++ ".chk"
+      l1 = addNewLines 1 $ "%chk=" ++ project 
       l2 = addNewLines 1 "%mem=4000Mb"
       l3 = addNewLines 1 "%nproc=2"
       l4 = addNewLines 1 $ "%scr=/scratch/" ++ name ++ "/"

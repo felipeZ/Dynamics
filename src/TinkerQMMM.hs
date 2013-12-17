@@ -1,3 +1,4 @@
+{-# Language BangPatterns, TupleSections #-}
 
 module TinkerQMMM (
                    parserKeyFile
@@ -8,7 +9,9 @@ module TinkerQMMM (
 import Control.Applicative
 import Control.Lens
 import qualified Data.Array.Repa as R
+import Data.List (lookup,unfoldr)
 import Data.List.Split (chunksOf)
+import Data.Maybe (fromMaybe)
 import qualified Data.Vector as V
 import System.Directory (renameFile)
 import Text.Parsec
@@ -48,7 +51,7 @@ parserLabelNumat = do
                    spaces 
                    n <- intNumber
                    anyLine
-                   return (l,n)
+                   return (l, n)
   
 -- =========================> Parser Tinker xyz <===============
 
@@ -77,21 +80,23 @@ parseLineAtomMM = do
                  
 -- ======================> rewrite XYZ File <============
 
-reWriteXYZtinker :: Molecule -> [(Label,Int)] -> Command -> Project ->  IO ()
-reWriteXYZtinker mol atomsQM commandTinker project = do
+reWriteXYZtinker :: Molecule -> [(Label,Int)] -> Project ->  IO ()
+reWriteXYZtinker mol atomsQM project = do
    renameFile (project++".xyz") "temp"
    tinkerQMMM <- parserXYZFile "temp"
-   let coordinates = chunksOf 3 $ R.toList $ mol^.getCoord
-       numbersQM   = snd <$> atomsQM
-       dim         = pred . length $ numbersQM
-       qmmm        = updateAtomsMM numbersQM 
-       updateAtomsMM xs = fst $ foldr step ([],reverse coordinates) tinkerQMMM      
-       step atom t@(acc,(x:xs)) =                      -- if the atom is QM append the new Coordinates
-            if  (atom^.numberMM) `elem` numbersQM      -- else return the same atom
-                  then let newAtom = set xyzMM x atom  -- the initial acc has the coordinates in reversed
-                       in (newAtom:acc,xs)             -- order because we are replacing the QM atoms beginning
-                  else t                               -- from the last one
-   writeXYZtinker qmmm  project  
+   let coordinates   = chunksOf 3 $ R.toList $ mol^.getCoord
+       numbersQM     = (pred . snd) <$> atomsQM           -- tinker indexes begin at 1 therefore indexes are traslating using pred
+       dim           = pred . length $ numbersQM
+       qmmm          = updateAtomsMM
+       mapa          = zip numbersQM coordinates 
+       fun           = fromMaybe (error "unknown atomic numbersQM") . flip lookup mapa
+       updateAtomsMM = fmap step tinkerQMMM                -- if the atom is QM append the new Coordinates
+       step atom     = let indx = atom^.numberMM           -- else return the same atom
+                           newPosition = fun indx
+                       in if indx `elem` numbersQM
+                          then atom &  xyzMM .~ newPosition
+                          else atom       
+   writeXYZtinker qmmm project  
  
 writeXYZtinker :: [AtomMM] -> Project -> IO ()
 writeXYZtinker atomsMM project = do
