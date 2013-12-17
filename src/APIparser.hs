@@ -581,7 +581,7 @@ writeGaussJob (theory,basis) project mol =  do
       l8 = addNewLines 2 "save the old Farts, use Fortran."
       l9 = addNewLines 1 "0 1"
       atoms = addNewLines 1 $ showAtoms mol
-      weights = if mol^.getElecSt == Left S0 then "" else addNewLines 5 $ " 0.5       0.5"
+      weights = if mol^.getElecSt == Left S0 then addNewLines 5 "" else addNewLines 5 $ " 0.5       0.5"
       result = foldl1 (++) [l1,l2,l3,l4,l5,l6,l7,l8,l9,atoms,weights]
   writeFile (project ++ ".com") result 
        
