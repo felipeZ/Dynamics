@@ -20,6 +20,7 @@ import Text.Printf
 
 -- =========> Internal imports <========
 import CommonTypes 
+import Constants (a0)
 import ParsecNumbers
 import ParsecText
 
@@ -84,8 +85,8 @@ reWriteXYZtinker :: Molecule -> [(Label,Int)] -> Project ->  IO ()
 reWriteXYZtinker mol atomsQM project = do
    renameFile (project++".xyz") "temp"
    tinkerQMMM <- parserXYZFile "temp"
-   let coordinates   = chunksOf 3 $ R.toList $ mol^.getCoord
-       numbersQM     = (pred . snd) <$> atomsQM           -- tinker indexes begin at 1 therefore indexes are traslating using pred
+   let coordinates   = chunksOf 3 $ R.toList . R.computeUnboxedS . R.map (*a0) $ mol^.getCoord -- Coordinates are printed in Amstrongs
+       numbersQM     = (pred . snd) <$> atomsQM      -- tinker indexes begin at 1 therefore indexes are traslating using pred
        dim           = pred . length $ numbersQM
        qmmm          = updateAtomsMM
        mapa          = zip numbersQM coordinates 

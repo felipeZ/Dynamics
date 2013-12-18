@@ -86,9 +86,9 @@ interactWith job project mol =
                  parseMolcas project ["Grad","Roots"] mol
                  
      MolcasTinker atomsQM -> do 
-                 print "rewrite XYZ file"
+                 print "Update QM atoms"
                  reWriteXYZtinker mol atomsQM project
-                 print "Launching"
+                 print "Launching tinker"
                  launchTinker project
                  print "modifyTinkerNames"
                  modifyTinkerNames project
@@ -102,8 +102,9 @@ interactWith job project mol =
                  let input  = project ++ ".com"
                      out    = project ++ ".log"        
                  writeGaussJob tupleTheory project mol 
-                 launchGaussian input
---                  launchJob $ "g09 " ++ input
+--                  launchGaussian input
+                 launchJob $ "g09 " ++ input
+                 print "Updating Roots info"
                  updateMultiStates out mol
                             
      Palmeiro conex dirs ->  launchPalmeiro conex dirs mol

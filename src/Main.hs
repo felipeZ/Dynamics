@@ -48,7 +48,9 @@ authors = "@2013  Felipe Zapata, Alessio Valentini, Angel Alvarez"
 -- default options
 defaultOptions    = Options
  { optDump        = False
- , optModules     = [("constrained",processConstrained),("externalForces",processExternalForces),("molcas",processMolcas),("palmeiro",processPalmeiro),("molcasTinker",processMolcasTinker),("molcasZeroVel",processMolcasZeroVelocity),("prueba",processPrueba)]
+ , optModules     = [("constrained",processConstrained),("externalForces",processExternalForces),("molcas",processMolcas),
+                     ("palmeiro",processPalmeiro),("molcasTinker",processMolcasTinker),("molcasZeroVel",processMolcasZeroVelocity),
+                     ("restartExternalForces",processRestartGauss),("prueba",processPrueba)]
  , optMode        = Nothing
  , optVerbose     = False
  , optShowVersion = False
@@ -122,17 +124,21 @@ printFiles opts@Options { optInput = files, optDataDir = datadir } = do
 -- =============> Drivers to run the molecular dynamics simulations in Molcas <==============
 
 processPrueba :: Options -> IO ()
-processPrueba opts =   do
+processPrueba  opts = do
   let temp = fromMaybe 298 $ optTemperature opts
-      files@[xyz,ctl,input] =  optInput opts
-  ctl <- getSuffixFile "." ".ctl"
-  conex <- parserFileInternasCtl ctl
+      files@[tinkerKey,tinkerXYZ,molcasInput,input] =  optInput opts      
   initData <- parseFileInput parseInput input
-  let getter   = (initData ^.)
-  initialMol  <- initializeMolcasOntheFly xyz (getter getInitialState) temp
-  let ints = calcInternals conex initialMol
-  print ints
-
+  let getter = (initData ^.)
+      project  = getter getProject
+  tinkerQMMM <- parserXYZFile tinkerXYZ
+  atomsQM    <- parserKeyFile tinkerKey
+  initialMol <- initializeMolcasTinker molcasInput (getter getInitialState) temp $ length atomsQM
+  let numat = initialMol ^. getAtoms . to length
+      thermo = initializeThermo numat temp
+      [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
+      step = 1
+      job = MolcasTinker atomsQM 
+  print initialMol
 
 processMolcas :: Options -> IO ()
 processMolcas opts = do
@@ -231,6 +237,9 @@ palmeiroLoop  mol dt t thermo job project step = do
              else return ()
 
 -- =============> Drivers to run the molecular dynamics simulations in Gaussian <==============
+
+processRestartGauss ::  Options -> IO ()
+processRestartGauss = undefined
 
 -- | on the fly molecular dynamics with applied external forces
 processExternalForces :: Options -> IO ()
