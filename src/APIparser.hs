@@ -558,7 +558,7 @@ writeInternasFortran qs =
   
 writeMolcasXYZ :: FilePath -> Molecule -> IO ()
 writeMolcasXYZ name mol = do
-  let s = showAtoms mol
+  let s = showCoord mol
       numat = length $  mol^.getAtoms
       strAtoms  =  (show numat) ++ "\n"
       comment = "Angstrom\n"
@@ -580,7 +580,7 @@ writeGaussJob (theory,basis) project mol =  do
       l7 = addNewLines 2 $ "# SCF=(MaxCycle=300,conver=7)"
       l8 = addNewLines 2 "save the old Farts, use Fortran."
       l9 = addNewLines 1 "0 1"
-      atoms = addNewLines 1 $ showAtoms mol
+      atoms = addNewLines 1 $ showCoord mol
       weights = if mol^.getElecSt == Left S0 then addNewLines 5 "" else addNewLines 5 $ " 0.5       0.5"
       result = foldl1 (++) [l1,l2,l3,l4,l5,l6,l7,l8,l9,atoms,weights]
   writeFile (project ++ ".com") result 
@@ -594,7 +594,7 @@ writeCurrentRoot mol theory =
                    
          
 printMol :: Molecule -> String -> IO ()
-printMol mol msg = appendFile "geometry.out" $ numat ++ (showAtoms mol)
+printMol mol msg = appendFile "geometry.out" $ numat ++ (showPositionVel mol)
   where numat = (show . length $ labels) ++ "\n" ++ msg ++ "\n"
         labels = mol^.getAtoms 
 
@@ -606,15 +606,23 @@ printData mol step = do
       l3 = addNewLines 2 $ "potential energies: " ++ (concatMap (printf "%.6f  ") . head $  mol^.getEnergy)          
   appendFile "result.out" $ foldl1' (++) [l1,l2,l3]  
         
-showAtoms :: Molecule -> String
-showAtoms mol  = concat $ DL.zipWith3 fun labels xs vs
+showCoord :: Molecule -> String
+showCoord mol  = concat $ DL.zipWith fun labels xs 
+  where labels = mol^.getAtoms
+        qs = mol^.getCoord
+        xs = chunksOf 3 . R.toList . computeUnboxedS . R.map (*a0) $  qs
+        fun l x  = (printf "%s" l) ++ (printxyz x) ++ "\n"
+        printxyz [x,y,z] = printf "%12.5f  %.5f  %.5f" x y z
+         
+showPositionVel :: Molecule -> String
+showPositionVel mol  = concat $ DL.zipWith3 fun labels xs vs
   where labels = mol^.getAtoms
         qs = mol^.getCoord
         xs = chunksOf 3 . R.toList . computeUnboxedS . R.map (*a0) $  qs
         vs = mol^.getVel . to (chunksOf 3 . R.toList)
         fun l x v = (printf "%s" l) ++ (printxyz x) ++ (printxyz v) ++ "\n"
         printxyz [x,y,z] = printf "%12.5f  %.5f  %.5f" x y z
-         
+                   
 addNewLines :: Int -> String -> String
 addNewLines n s = let f = (++"\n")
                   in iterate f s !! n        
