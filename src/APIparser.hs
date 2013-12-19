@@ -167,7 +167,6 @@ updateCoeffEnergies energies coeff mol =
 updateNewJobInput :: Job -> Molecule -> Job
 updateNewJobInput job mol = case job of
                                  Molcas   theory          -> updateMolcasInput theory rlxroot
-                                 Gaussian (theory,basis)  -> Gaussian (updateGaussianInput theory rlxroot, basis) 
                                  otherwise                -> job               
                                                               
   where rlxroot = succ $ calcElectSt mol                                                              
@@ -177,19 +176,13 @@ updateMolcasInput xs rlxroot = Molcas $ fmap modifyInputRas xs
  where modifyInputRas x = case x of
                                (RasSCF _ h t) -> RasSCF rlxroot h t
                                otherwise      -> x
-
-updateGaussianInput :: TheoryLevel -> Int -> TheoryLevel
-updateGaussianInput theory rlxroot =
-       case theory of
-            CASSCF t _old s -> CASSCF t rlxroot s
-            otherwise       -> theory
                 
 -- =======================> Tinker <===========                                                
 launchTinker :: String -> IO ()
 launchTinker project = do
-   let root   ="/home/marco/7.8.dev/tinker-5.1.09/source/optimize.x "
-       name   = project ++ ".xyz"
-       suffix = " 0.1 > /dev/null 2>&1"
+   let root   ="/home/marco/7.8.dev/tinker-5.1.09/source/dynamic.x "
+       name   = project ++ ".xyz"                    -- first argument : .xyz file
+       suffix = "1 0.5 0.1 2 298 > /dev/null 2>&1"   -- argument : step (1) dt (default 1) dump (default 0.1) simulationControl (thermostat 2) temperature (298 K)      
        job = root ++ name ++ suffix
    launchJob job
 
@@ -571,8 +564,7 @@ writeMolcasXYZ name mol = do
 writeGaussJob :: (TheoryLevel,Basis)  -> String -> Molecule -> IO ()
 writeGaussJob (theory,basis) project mol =  do
   name <- getLoginName   
-  let Left elecSt = mol^.getElecSt
-      l1 = addNewLines 1 $ "%chk=" ++ project 
+  let l1 = addNewLines 1 $ "%chk=" ++ project 
       l2 = addNewLines 1 "%mem=2000Mb"
       l3 = addNewLines 1 "%nproc=2"
 --       l4 = addNewLines 1 $ "%scr=/scratch/" ++ name ++ "/"
@@ -582,7 +574,7 @@ writeGaussJob (theory,basis) project mol =  do
       l8 = addNewLines 2 "save the old Farts, use Fortran."
       l9 = addNewLines 1 "0 1"
       atoms = addNewLines 1 $ showCoord mol
-      weights = if mol^.getElecSt == Left S0 then addNewLines 5 "" else addNewLines 5 $ " 0.5       0.5"
+      weights = addNewLines 5 $ " 0.5       0.5"
       result = foldl1 (++) [l1,l2,l3,l6,l7,l8,l9,atoms,weights]
   writeFile (project ++ ".com") result 
                            
