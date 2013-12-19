@@ -32,6 +32,7 @@ import CommonTypes
 import Constants
 import Gaussian 
 import InternalCoordinates
+import Logger
 import Molcas 
 import ParsecNumbers
 import ParsecText
@@ -571,41 +572,34 @@ writeGaussJob :: (TheoryLevel,Basis)  -> String -> Molecule -> IO ()
 writeGaussJob (theory,basis) project mol =  do
   name <- getLoginName   
   let Left elecSt = mol^.getElecSt
-      gaussTheoryLevel = show $ writeCurrentRoot mol theory
       l1 = addNewLines 1 $ "%chk=" ++ project 
-      l2 = addNewLines 1 "%mem=4000Mb"
+      l2 = addNewLines 1 "%mem=2000Mb"
       l3 = addNewLines 1 "%nproc=2"
-      l4 = addNewLines 1 $ "%scr=/scratch/" ++ name ++ "/"
-      l5 = addNewLines 1 $ "%rwf=/scratch/" ++ name ++ "/"
-      l6 = addNewLines 1 $ "#p " ++ gaussTheoryLevel ++ basis ++ "  force  iop(1/33=1) nosymm"
+--       l4 = addNewLines 1 $ "%scr=/scratch/" ++ name ++ "/"
+--       l5 = addNewLines 1 $ "%rwf=/scratch/" ++ name ++ "/"
+      l6 = addNewLines 1 $ "#p " ++ (show theory) ++ basis ++ "  force  iop(1/33=1) nosymm"
       l7 = addNewLines 2 $ "# SCF=(MaxCycle=300,conver=7)"
       l8 = addNewLines 2 "save the old Farts, use Fortran."
       l9 = addNewLines 1 "0 1"
       atoms = addNewLines 1 $ showCoord mol
       weights = if mol^.getElecSt == Left S0 then addNewLines 5 "" else addNewLines 5 $ " 0.5       0.5"
-      result = foldl1 (++) [l1,l2,l3,l4,l5,l6,l7,l8,l9,atoms,weights]
+      result = foldl1 (++) [l1,l2,l3,l6,l7,l8,l9,atoms,weights]
   writeFile (project ++ ".com") result 
-       
-writeCurrentRoot :: Molecule -> TheoryLevel -> TheoryLevel
-writeCurrentRoot mol theory = 
-  let  new = succ $ calcElectSt mol
-  in case theory of
-          CASSCF t rlxroot s ->  if rlxroot == new then theory else CASSCF t new s
-          otherwise -> theory
-                   
-         
-printMol :: Molecule -> String -> IO ()
-printMol mol msg = appendFile "geometry.out" $ numat ++ (showPositionVel mol)
+                           
+
+printMol :: Molecule -> String -> Logger -> IO ()         
+printMol mol msg logger = logMessage logger $ numat ++ (showPositionVel mol)
   where numat = (show . length $ labels) ++ "\n" ++ msg ++ "\n"
         labels = mol^.getAtoms 
-
-printData :: Molecule -> Int -> IO ()
-printData mol step = do
+          
+printData :: Molecule -> Int -> Logger -> IO ()        
+printData mol step logger = do
   let st =  mol^.getElecSt 
       l1 = addNewLines 1 $ "step: " ++ (show step) 
       l2 = addNewLines 1 $ "electronic State: " ++ (show st)
       l3 = addNewLines 2 $ "potential energies: " ++ (concatMap (printf "%.6f  ") . head $  mol^.getEnergy)          
-  appendFile "result.out" $ foldl1' (++) [l1,l2,l3]  
+  logMessage logger $ foldl1' (++) [l1,l2,l3]  
+        
         
 showCoord :: Molecule -> String
 showCoord mol  = concat $ DL.zipWith fun labels xs 

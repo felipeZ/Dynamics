@@ -224,13 +224,15 @@ initializeMolcasTinker molcasInput st temp numat = do
 -- |collects the initial required to initialize a dynamic on the fly
 initializeSystemOnTheFly :: FilePath -> Singlet -> Temperature-> IO Molecule
 initializeSystemOnTheFly file st temp = do
-     let keywords = ["Coordinates","Grad","Masses","Charges"]
+     let keywords = ["Coordinates","Masses","Charges"]
      pairs <- takeInfo keywords <=< parseGaussianCheckpoint $ file
      let getData = lookupLabel pairs
-         [coord,grad,masses] = fmap ((\ys -> R.fromListUnboxed (Z:. DL.length ys) ys) . getData) ["Coordinates","Grad","Masses"]
-         labels = fmap (charge2Label .floor) $ getData "Charges"
-         aumasses = computeUnboxedS $ R.map (*amu) masses
-         forces = computeUnboxedS $ R.map (negate) grad
+         [coord,masses] = fmap ((\ys -> R.fromListUnboxed (Z:. DL.length ys) ys) . getData) ["Coordinates","Masses"]
+         labels         = fmap (charge2Label .floor) $ getData "Charges"
+         numat          = DL.length labels
+         dim            = 3*numat
+         aumasses       = computeUnboxedS $ R.map (*amu) masses
+         forces         = R.fromUnboxed (Z:.dim) $ VU.replicate dim 0
      velocities <- genMaxwellBoltzmann aumasses temp
      return $ defaultMol & getCoord .~ coord 
                          & getVel   .~ velocities 

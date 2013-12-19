@@ -26,7 +26,9 @@ data Triplet = T1 | T2 | T3 | T4 | T5 deriving (Show,Enum,Eq,Read)
 data TheoryLevel = CASSCF (Int,Int) Int String  | HF | Unspecified   -- (number Electrons, Orbital) relaxRoot further commands
 
 instance Show TheoryLevel where
-    show (CASSCF (electrons,orbitals) rlxroot s) = "CASSCF" ++ "(" ++ show electrons ++ "," ++ show orbitals ++ ",NRoot=" ++ show rlxroot ++ s ++ ")" 
+    show (CASSCF (electrons,orbitals) rlxroot s) = let prefix = "CASSCF" ++ "(" ++ show electrons ++ "," ++ show orbitals ++ ",NRoot=" ++ show rlxroot 
+                                                       sufix  = if rlxroot /= 1 then s ++ ")" else ")"
+                                                   in prefix ++ sufix
     show HF                                      = "HF"
     show Unspecified                             = "Unspecified"
  
