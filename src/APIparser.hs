@@ -103,7 +103,6 @@ interactWith job project mol =
                  let input  = project ++ ".com"
                      out    = project ++ ".log"        
                  writeGaussJob tupleTheory project mol 
---                  launchGaussian input
                  launchJob $ "g09 " ++ input
                  print "Updating Roots info"
                  updateMultiStates out mol
@@ -563,7 +562,7 @@ writeMolcasXYZ name mol = do
 
 writeGaussJob :: (TheoryLevel,Basis)  -> String -> Molecule -> IO ()
 writeGaussJob (theory,basis) project mol =  do
-  name <- getLoginName   
+--   name <- getLoginName   
   let l1 = addNewLines 1 $ "%chk=" ++ project 
       l2 = addNewLines 1 "%mem=2000Mb"
       l3 = addNewLines 1 "%nproc=2"
