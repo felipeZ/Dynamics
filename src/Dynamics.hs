@@ -105,10 +105,10 @@ bath :: Molecule -> DT -> Temperature -> Thermo -> (Molecule,Thermo)
 bath mol dt t thermo@(Thermo q1 q2 vx1 vx2) =
   let vel  = mol ^. getVel
       mass = mol ^. getMass
-      n    = (\(Z:. m) -> fromIntegral m) $ extent vel
+      n    = mol ^. getAtoms . to (fromIntegral . length)
       ek   = calcEk vel mass
       g2   = (q1*vx1^2 - t*kb)/q2
-      g1   = (2.0*ek -3.0*n*t*CTES.kb)/q1
+      g1   = (2.0*ek -3.0*n*t*kb)/q1
       vx4  = vx2 + g2*dt4
       vx3  = (\x-> x*exp(-vx4*dt8)) . (\x -> x + g1*dt4) . (\x -> x*exp(-vx4*dt8)) $ vx1
 
@@ -116,7 +116,7 @@ bath mol dt t thermo@(Thermo q1 q2 vx1 vx2) =
       newVel = R.computeS . R.map (*s) $ vel
       ek2 = calcEk newVel mass
 
-      g3 = (2.0*ek2 -3.0*n*t)/q1
+      g3 = (2.0*ek2 -3.0*n*t*kb)/q1
       vx5 = (\x -> x*exp (-vx4*dt8)) . (\x -> x + g3*dt4) $ vx3
       g4 = (q1*vx5 - t*kb) / q2
       vx6 = vx4 + g4* dt4
@@ -124,7 +124,8 @@ bath mol dt t thermo@(Thermo q1 q2 vx1 vx2) =
   in (set getVel newVel mol, Thermo q1 q2 vx5 vx6)
 
   where [dt2,dt4,dt8] = tail . take 4 . iterate (*0.5) $ dt
-
+                 
+  
 -- | NoseHoover 1 and 2 advance the coordinates, while
 -- | interchanging energy with the termostat
 noseHoover1 :: Molecule ->  DT -> Temperature -> Thermo -> (Molecule,Thermo)
@@ -135,9 +136,6 @@ noseHoover1 mol dt t thermo = (newMol,newThermo)
 noseHoover2 :: Molecule -> DT -> Temperature -> Thermo -> (Molecule,Thermo)
 noseHoover2  mol dt t thermo = bath mol2 dt t thermo
   where mol2 = moveVel dt mol
-
---  let  newThermo = initializeThermo (length . getAtoms $ mol) t 2.2e1
-
 
 
 dynamicNoseHoover :: Molecule -> DT -> Temperature -> Thermo -> Job -> String -> IO (Molecule,Thermo)  
