@@ -16,6 +16,7 @@ module Dynamics (
                ,moveVel
                ,noseHoover1
                ,noseHoover2
+               ,velocityVerletForces
                )where
 
 import qualified Data.List as DL
@@ -87,7 +88,15 @@ moveVel dt mol = set getVel newVel mol
                           m = ms ! (Z :. i `div` 3)
                       in v + dt2*f/m )
 
-        
+-- | Velocity-Verlet Algorithm 
+
+velocityVerletForces ::  Molecule -> DT -> Job -> String -> Anchor -> Double -> IO Molecule  
+velocityVerletForces !mol !dt job project anchor modForceExt = do  
+  let  step1 = (\x y -> moveVel y . moveCoord y $ x) mol dt      
+  step2 <- interactWith job project step1
+  let newMol = appliedForce anchor modForceExt step2
+  return $ moveVel dt newMol
+          
 -- =================> NOSÉ-HOOVER <==================
 
 -- |The record thermostat is in charge of the bookkeeping of a chain of thermostat.
@@ -131,7 +140,7 @@ noseHoover2  mol dt t thermo = bath mol2 dt t thermo
 
 
 
-dynamicNoseHoover ::  Molecule -> DT -> Temperature -> Thermo -> Job -> String -> IO (Molecule,Thermo)  
+dynamicNoseHoover :: Molecule -> DT -> Temperature -> Thermo -> Job -> String -> IO (Molecule,Thermo)  
 dynamicNoseHoover !mol !dt !t thermo job project = do  
        let (step1,thermo1) = noseHoover1 mol dt t thermo      
        step2 <- interactWith job project step1
