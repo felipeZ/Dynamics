@@ -51,7 +51,9 @@ defaultOptions    = Options
  { optDump        = False
  , optModules     = [("constrained",processConstrained),("externalForces",processExternalForces),("molcas",processMolcas),
                      ("palmeiro",processPalmeiro),("molcasTinker",processMolcasTinker),("molcasZeroVel",processMolcasZeroVelocity),
+                     ("externalForcesVel",processExternalForcesVel),  
                      ("velocityVerlet",processVerlet),("restartExternalForces",processRestartGauss),("prueba",processPrueba)]
+                     
  , optMode        = Nothing
  , optVerbose     = False
  , optShowVersion = False
@@ -286,6 +288,28 @@ driverVerlet mol job time dt anchor externalForce aMatrix step project loggers =
                   let [oldRoot,newRoot] = (^.getElecSt) `fmap` [newMol,tullyMol]
                       newJob            =  if oldRoot == newRoot then job else updateNewJobInput job tullyMol
                   driverVerlet tullyMol newJob (time-dt) dt anchor externalForce newAmatrix (succ step) project loggers
+
+-- | on the fly molecular dynamics with applied external forces
+processExternalForcesVel :: Options -> IO ()
+processExternalForcesVEl opts = do
+  let temp = fromMaybe 298 $ optTemperature opts
+      [input,fchk,out] = optInput opts 
+  initData <- parseFileInput parseInput input
+  let getter = (initData ^.)
+  mol <- (updateMultiStates out) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp
+  let numat         = mol ^. getAtoms . to length
+      thermo        = initializeThermo numat temp
+      [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
+      aMatrix       = initialAMTX mol 
+      step          = 1
+      theoryLevels  = getter getTheory
+      basis         = getter getBasis
+      job           = Gaussian (theoryLevels,basis)
+      project       = "TullyExternalForces"
+  newMol  <- interactWith job project mol
+  loggers <- mapM initLogger ["geometry.out", "result.out"] 
+  constantForceDynamics newMol job thermo temp auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
+  mapM_ logStop loggers                   
                   
 -- | on the fly molecular dynamics with applied external forces
 processExternalForces :: Options -> IO ()

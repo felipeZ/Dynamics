@@ -114,11 +114,11 @@ bath mol dt t thermo@(Thermo q1 q2 vx1 vx2) =
 
       s = exp(-vx3*dt2)
       newVel = R.computeS . R.map (*s) $ vel
-      ek2 = calcEk newVel mass
+      ek2 = ek*s^2
 
       g3 = (2.0*ek2 -3.0*n*t*kb)/q1
-      vx5 = (\x -> x*exp (-vx4*dt8)) . (\x -> x + g3*dt4) $ vx3
-      g4 = (q1*vx5 - t*kb) / q2
+      vx5 = (\x -> x*exp (-vx4*dt8)) . (\x -> x + g3*dt4) . (\x -> x*exp(-vx4*dt8)) $ vx3
+      g4 = (q1*vx5^2 - t*kb) / q2
       vx6 = vx4 + g4* dt4
 
   in (set getVel newVel mol, Thermo q1 q2 vx5 vx6)
@@ -179,9 +179,7 @@ sparseList i m n xs | i == (pred m) =xs
                     | i == (pred n) = fmap negate xs
                     | otherwise = take 3 . repeat $ 0.0
 
-
         
-
 -- ===================> UTILITIES <==================
 
 calcTotalEnergy :: Molecule -> Double
