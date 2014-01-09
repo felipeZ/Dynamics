@@ -291,7 +291,7 @@ driverVerlet mol job time dt anchor externalForce aMatrix step project loggers =
 
 -- | on the fly molecular dynamics with applied external forces
 processExternalForcesVel :: Options -> IO ()
-processExternalForcesVEl opts = do
+processExternalForcesVel opts = do
   let temp = fromMaybe 298 $ optTemperature opts
       [input,fchk,out] = optInput opts 
   initData <- parseFileInput parseInput input
