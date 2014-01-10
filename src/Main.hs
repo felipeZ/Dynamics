@@ -157,16 +157,17 @@ processMolcas opts = do
       project  = getter getProject
   initialMol   <- initializeMolcasOntheFly xyz (getter getInitialState) temp
   molcasInput  <- parseMolcasInputFile molcas
-  let numat         = initialMol ^. getAtoms . to length
-      [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
-      thermo        = initializeThermo numat temp
-      step          = 1
-      job           = Molcas molcasInput
-      aMatrix       = initialAMTX initialMol
-  mol <- interactWith job project initialMol
-  loggers <- mapM initLogger ["geometry.out", "result.out"]
-  constantForceDynamics mol job thermo temp auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
-  mapM_ logStop loggers
+  print molcasInput 
+--   let numat         = initialMol ^. getAtoms . to length
+--       [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
+--       thermo        = initializeThermo numat temp
+--       step          = 1
+--       job           = Molcas molcasInput
+--       aMatrix       = initialAMTX initialMol
+--   mol <- interactWith job project initialMol
+--   loggers <- mapM initLogger ["geometry.out", "result.out"]
+--   constantForceDynamics mol job thermo temp auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
+--   mapM_ logStop loggers
 
 processMolcasZeroVelocity :: Options -> IO ()
 processMolcasZeroVelocity opts = do
