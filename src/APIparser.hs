@@ -79,20 +79,22 @@ naturalTransf (ParseInfo xs) = catMaybes xs
 interactWith :: Job -> String -> Molecule -> IO Molecule
 interactWith job project mol = 
   case job of 
-     Molcas theory -> do
+     Molcas inputData -> do
                  let io1 = writeMolcasXYZ (project ++ ".xyz") mol
-                     io2 = writeFile (project ++ ".input") $ concatMap show theory
+                     io2 = writeFile (project ++ ".input") $ concatMap show inputData
                  concurrently io1 io2 
                  launchMolcas project
                  parseMolcas project ["Grad","Roots"] mol
                  
-     MolcasTinker atomsQM -> do 
+     MolcasTinker inputData atomsQM molcasQM ->  do 
                  print "Update QM atoms"
                  reWriteXYZtinker mol atomsQM project
                  print "Launching tinker"
                  launchTinker project
                  print "modifyTinkerNames"
                  modifyTinkerNames project
+                 print "rewrite Molcas input"
+                 modifyMolcasInput inputData molcasQM project mol
                  print "launch Molcas"
                  launchMolcas project
                  print "Parsing Molcas output"
@@ -165,8 +167,8 @@ updateCoeffEnergies energies coeff mol =
                               
 updateNewJobInput :: Job -> Molecule -> Job
 updateNewJobInput job mol = case job of
-                                 Molcas   theory          -> updateMolcasInput theory rlxroot
-                                 otherwise                -> job               
+                                 Molcas   theory -> updateMolcasInput theory rlxroot
+                                 otherwise       -> job               
                                                               
   where rlxroot = succ $ calcElectSt mol                                                              
 
@@ -253,6 +255,31 @@ getSuffixFile path suff = do
 launchMolcas :: Project ->  IO ()
 launchMolcas project = launchCluster "Molcas" $ project ++ ".input"
 
+modifyMolcasInput :: [MolcasInput String] -> [AtomQM] -> Project -> Molecule -> IO ()
+modifyMolcasInput inputData molcasQM project mol = do
+       let newInput = fmap fun inputData
+           fun dat = case dat of
+                       Gateway x -> writeGateway molcasQM mol
+                       otherwise -> dat
+       writeFile (project ++ ".input") $ concatMap show newInput
+       
+       
+writeGateway :: [AtomQM] -> Molecule -> MolcasInput String
+writeGateway atoms mol = Gateway $ concat $ DL.zipWith3 fun xs symbols atoms
+
+  where xs        = lines $ showCoord mol
+        symbols   = mol ^. getAtoms
+        between x = " Basis set\n" ++ x ++ " End of Basis\n"
+        spaces    = (" "++)
+        ans       = spaces . (++"     Angstrom\n")
+        mm        = spaces . (++"...... / MM\n")
+        fun :: String -> Label -> AtomQM -> String
+        fun x s (AtomQM label _xyz typo) = 
+                case typo of
+                     QM basis -> between $  s ++ "." ++ basis ++ "\n" ++ (ans x)
+                     MM -> between $ (mm s) ++ (ans x) ++ " Charge=  -0.000000\n" 
+                                             
+                        
 parseMolcas :: Project -> [Label] -> Molecule -> IO Molecule
 parseMolcas project labels mol = do
   pairs <- takeInfoMolcas labels <=< parseMolcasOutputFile $ project ++ ".out"

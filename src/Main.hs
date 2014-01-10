@@ -191,33 +191,32 @@ processMolcasZeroVelocity opts = do
 processMolcasTinker :: Options -> IO ()
 processMolcasTinker opts = do
   let temp = fromMaybe 298 $ optTemperature opts
-      files@[tinkerKey,tinkerXYZ,molcasInput,input] =  optInput opts      
+      files@[tinkerKey,tinkerXYZ,molcas,input] =  optInput opts      
   initData <- parseFileInput parseInput input
-  let getter = (initData ^.)
-      project  = getter getProject
-  tinkerQMMM <- parserXYZFile tinkerXYZ
-  atomsQM    <- parserKeyFile tinkerKey
-  initialMol <- initializeMolcasTinker molcasInput (getter getInitialState) temp $ length atomsQM
-  let numat = initialMol ^. getAtoms . to length
-      thermo = initializeThermo numat temp
+  let getter  = (initData ^.)
+      project = getter getProject
+  tinkerQMMM            <- parserXYZFile tinkerXYZ
+  atomsQM               <- parserKeyFile tinkerKey
+  molcasInput           <- parseMolcasInputFile molcas
+  (initialMol,molcasQM) <- initializeMolcasTinker molcas (getter getInitialState) temp $ length atomsQM
+  let numat         = initialMol ^. getAtoms . to length
+      thermo        = initializeThermo numat temp
       [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
-      step = 1
-      job = MolcasTinker atomsQM 
-  mol <- interactWith job project initialMol        
-  print mol  
---   loggers <- mapM initLogger ["geometry.out", "result.out"]
---   driverMolcasTinker initialMol audt auTime thermo job project step
---   mapM_ logStop loggers 
+      step          = 1
+      job           = MolcasTinker molcasInput atomsQM molcasQM
+  loggers <- mapM initLogger ["geometry.out", "result.out"]
+  driverMolcasTinker initialMol audt auTime temp thermo job project step loggers
+  mapM_ logStop loggers 
 
-driverMolcasTinker :: Molecule -> DT -> Temperature -> Thermo -> Job -> String  -> Step -> [Logger] -> IO ()  
-driverMolcasTinker mol dt t thermo job project step loggers = 
+driverMolcasTinker :: Molecule -> Time -> DT -> Temperature -> Thermo -> Job -> Project -> Step -> [Logger] -> IO ()  
+driverMolcasTinker mol t dt temp thermo job project step loggers = 
   if t <0 then return ()
           else do 
             let es = concatMap (printf "%.6f  ") $ mol ^. getEnergy . to head
             zipWithM_ ($) [printMol mol es, printData mol step] loggers
-            (newMol,newThermo) <- dynamicNoseHoover mol dt t thermo job project
-            driverMolcasTinker newMol dt (t-dt) newThermo job project (succ step) loggers
-    
+            (newMol,newThermo) <- dynamicNoseHoover mol dt temp thermo job project
+            driverMolcasTinker newMol (t-dt) dt temp newThermo job project (succ step) loggers
+            
 -- =============> Drivers to call Palmeiro Interpolator <======================================
 
 -- | Molecular Dynamics using interpolated PES 
@@ -352,7 +351,6 @@ tullyDriver dt aMatrix step mol =
   if (mol^. getCoeffCI . to length) /= 3  -- At least 3 set of CI coefficients are required in oder to initialize the Tully
      then return (mol,aMatrix) 
      else tullyHS dt aMatrix step mol
-
 
 
 processConstrained :: Options -> IO ()

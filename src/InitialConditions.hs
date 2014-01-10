@@ -213,13 +213,14 @@ initializeBaseOnXYZ xs st temp = do
                       & getAtoms .~ labels 
                       & getElecSt.~ (Left st) 
                      
-initializeMolcasTinker :: FilePath -> Singlet -> Temperature -> Int -> IO Molecule  
+initializeMolcasTinker :: FilePath -> Singlet -> Temperature -> Int -> IO (Molecule,[AtomQM])  
 initializeMolcasTinker molcasInput st temp numat = do
   molcasQM   <- parserInputMolcasQM molcasInput $ parserGatewayQM numat
   let atoms  = takeLabelCoordinates <$> molcasQM
-  initializeBaseOnXYZ atoms st temp
+  mol <- initializeBaseOnXYZ atoms st temp
+  return (mol,molcasQM)
                                              
-  where takeLabelCoordinates (AtomQM label xyz) = (label,xyz)  
+  where takeLabelCoordinates (AtomQM label xyz _) = (label,xyz)  
   
 -- |collects the initial required to initialize a dynamic on the fly
 initializeSystemOnTheFly :: FilePath -> Singlet -> Temperature-> IO Molecule

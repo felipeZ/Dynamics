@@ -227,20 +227,19 @@ parserAtomMM = do
     spaces >> try (string "Angstrom" <|> string "angstrom")
     spaces >> try (string "Charge" <|> string "charge") >> spaces >> char '=' >> spaces >> realNumber
     spaces >> try (string "End of Basis\n")
-    return $ AtomQM label xyz
+    return $ AtomQM label xyz MM
     
     
 parserAtomQM :: MyParser MolState AtomQM                 
 parserAtomQM = do
      spaces >> try (string "Basis set\n" <|> string "basis set\n")
-     anyLine  -- basis Line
+     basis <- (manyTill anyChar $ char '.') >> anyLine -- basis Line
      label <- spaces >> manyTill anyChar digit
      manyTill digit space
      xyz   <- count 3 (spaces >> realNumber)
      manyTill anyChar newline
      spaces >> try (string "End of Basis\n")
-     return $ AtomQM label xyz
-
+     return $ AtomQM label xyz $ QM basis
 
      
  -- ------------------------------------------------------------------------------------------------------------
