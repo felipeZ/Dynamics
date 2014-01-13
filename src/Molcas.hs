@@ -156,7 +156,7 @@ parseInputSection =    try parserInputCommand
 
 parserInputCommand :: MyParser MolState (MolcasInput String )
 parserInputCommand = do
-                     string ">>"
+                     string ">"
                      Command <$> anyLine
 
 parserGateway :: MyParser MolState (MolcasInput String )
