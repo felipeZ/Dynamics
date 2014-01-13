@@ -11,7 +11,7 @@ import Data.Complex
 import Data.Maybe ( fromMaybe )
 import Control.Concurrent
 import Control.Concurrent.Async
-import Control.Lens ((^.),to)
+import Control.Lens ((.~),(^.),(&),to)
 import Control.Monad ((<=<),liftM,zipWithM_)
 import Control.Monad.Trans.Either
 import System.Environment ( getArgs )
@@ -51,8 +51,9 @@ defaultOptions    = Options
  { optDump        = False
  , optModules     = [("constrained",processConstrained),("externalForces",processExternalForces),("molcas",processMolcas),
                      ("palmeiro",processPalmeiro),("molcasTinker",processMolcasTinker),("molcasZeroVel",processMolcasZeroVelocity),
-                     ("externalForcesVel",processExternalForcesVel),  
-                     ("velocityVerlet",processVerlet),("restartExternalForces",processRestartGauss),("prueba",processPrueba)]
+                     ("molcasVel",processMolcasVel),("externalForcesVel",processExternalForcesVel),  
+                     ("velocityVerlet",processVerlet),("restartExternalForces",processRestartGauss),
+                     ("rewriteGateway",processGateway),("prueba",processPrueba)]
                      
  , optMode        = Nothing
  , optVerbose     = False
@@ -129,21 +130,15 @@ printFiles opts@Options { optInput = files, optDataDir = datadir } = do
 processPrueba :: Options -> IO ()
 processPrueba opts = do
   let temp = fromMaybe 298 $ optTemperature opts
-      [input,fchk,out] = optInput opts 
+      files@[xyz,velxyz,molcasFile,input] =  optInput opts
   initData <- parseFileInput parseInput input
-  let getter = (initData ^.)
-  loggers <- mapM initLogger ["geometry.out", "result.out"]
-  mol <- (updateMultiStates out) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp
-  let numat         = mol ^. getAtoms . to length
-      thermo        = initializeThermo numat temp
-      [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
-      aMatrix       = initialAMTX mol 
-      step          = 1
-      theoryLevels  = getter getTheory
-      basis         = getter getBasis
-      job           = Gaussian (theoryLevels,basis)
-      project       = "TullyExternalForces"
-  mapM_ logStop loggers
+  let getter   = (initData ^.)
+      project  = getter getProject
+  molVel       <- initializeMolcasOntheFly xyz (getter getInitialState) temp
+  vs           <- readInitialVel velxyz
+  molcasInput  <- parseMolcasInputFile molcasFile
+  let initialMol    = molVel & getVel .~ vs
+  print initialMol
             
             
 -- =============> Drivers to run the molecular dynamics simulations in Molcas <==============
@@ -151,12 +146,12 @@ processPrueba opts = do
 processMolcas :: Options -> IO ()
 processMolcas opts = do
   let temp = fromMaybe 298 $ optTemperature opts
-      files@[xyz,molcas,input] =  optInput opts
+      files@[xyz,molcasFile,input] =  optInput opts
   initData <- parseFileInput parseInput input
   let getter   = (initData ^.)
       project  = getter getProject
   initialMol   <- initializeMolcasOntheFly xyz (getter getInitialState) temp
-  molcasInput  <- parseMolcasInputFile molcas
+  molcasInput  <- parseMolcasInputFile molcasFile
   let numat         = initialMol ^. getAtoms . to length
       [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
       thermo        = initializeThermo numat temp
@@ -168,15 +163,37 @@ processMolcas opts = do
   constantForceDynamics mol job thermo temp auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
   mapM_ logStop loggers
 
+processMolcasVel :: Options -> IO ()  
+processMolcasVel opts = do
+  let temp = fromMaybe 298 $ optTemperature opts
+      files@[xyz,velxyz,molcasFile,input] =  optInput opts
+  initData <- parseFileInput parseInput input
+  let getter   = (initData ^.)
+      project  = getter getProject
+  molVel       <- initializeMolcasOntheFly xyz (getter getInitialState) temp
+  vs           <- readInitialVel velxyz
+  molcasInput  <- parseMolcasInputFile molcasFile
+  let initialMol    = molVel & getVel .~ vs
+      numat         = initialMol ^. getAtoms . to length
+      [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
+      thermo        = initializeThermo numat temp
+      step          = 1
+      job           = Molcas molcasInput
+      aMatrix       = initialAMTX initialMol
+  mol <- interactWith job project initialMol
+  loggers <- mapM initLogger ["geometry.out", "result.out"]
+  constantForceDynamics mol job thermo temp auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
+  mapM_ logStop loggers
+  
 processMolcasZeroVelocity :: Options -> IO ()
 processMolcasZeroVelocity opts = do
   let temp = fromMaybe 298 $ optTemperature opts
-      files@[xyz,molcas,input] =  optInput opts
+      files@[xyz,molcasFile,input] =  optInput opts
   initData <- parseFileInput parseInput input
   let getter   = (initData ^.)
       project  = getter getProject
   initialMol  <- initializeMolcasZeroVel xyz (getter getInitialState) temp
-  molcasInput <- parseMolcasInputFile molcas
+  molcasInput <- parseMolcasInputFile molcasFile
   let numat = initialMol ^. getAtoms . to length
       [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
       thermo        = initializeThermo numat temp
@@ -191,14 +208,14 @@ processMolcasZeroVelocity opts = do
 processMolcasTinker :: Options -> IO ()
 processMolcasTinker opts = do
   let temp = fromMaybe 298 $ optTemperature opts
-      files@[tinkerKey,tinkerXYZ,molcas,input] =  optInput opts      
+      files@[tinkerKey,tinkerXYZ,molcasFile,input] =  optInput opts      
   initData <- parseFileInput parseInput input
   let getter  = (initData ^.)
       project = getter getProject
   tinkerQMMM            <- parserXYZFile tinkerXYZ
   atomsQM               <- parserKeyFile tinkerKey
-  molcasInput           <- parseMolcasInputFile molcas
-  (initialMol,molcasQM) <- initializeMolcasTinker molcas (getter getInitialState) temp $ length atomsQM
+  molcasInput           <- parseMolcasInputFile molcasFile
+  (initialMol,molcasQM) <- initializeMolcasTinker molcasFile (getter getInitialState) temp $ length atomsQM
   let numat         = initialMol ^. getAtoms . to length
       thermo        = initializeThermo numat temp
       [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
@@ -352,7 +369,19 @@ tullyDriver dt aMatrix step mol =
      then return (mol,aMatrix) 
      else tullyHS dt aMatrix step mol
 
+-- ===================> Miscallaneus Functions <================
 
+
+processGateway :: Options -> IO ()
+processGateway opts = do
+  let files@[tinkerKey,tinkerXYZ,molcasFile] =  optInput opts      
+      (project,_) = break (=='.') molcasFile
+  tinkerQMMM    <- parserXYZFile tinkerXYZ
+  atomsQM       <- parserKeyFile tinkerKey
+  molcasInput   <- parseMolcasInputFile molcasFile
+  (initialMol,molcasQM) <- initializeMolcasTinker molcasFile S0 300 $ length atomsQM -- a default 
+  modifyMolcasInput molcasInput molcasQM project initialMol
+   
 processConstrained :: Options -> IO ()
 processConstrained = undefined
 -- processConstrained opts@Options { optInput = (file:_)} =

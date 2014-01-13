@@ -261,13 +261,6 @@ initialConditions !cartCoord !masses !dervEs !conex !t = do
                          & getDervEn.~ dervEs
                          & getFCStruc.~fc
 
-genMaxwellBoltzmann :: Array U DIM1 Double -> Temperature -> IO (Array U DIM1 Double)
-genMaxwellBoltzmann !ms !t = do
-  let stds = fmap (\mi -> sqrt $ (t*kb/mi)) $ R.toList ms
-  xs <- mapM (\std -> (take 3) `liftM` (normalsIO' (0,std)))  stds  
-  let vs = concat xs
-  return $ R.fromListUnboxed (Z:. length vs) vs
-
 parseConnections :: FilePath -> IO Connections
 parseConnections file = do
   r <- parseFromFile parseInternals file
@@ -275,6 +268,23 @@ parseConnections file = do
        Left msg -> error $ show msg
        Right conex -> return conex
   
+-- ====================> Initial Velocities <================  
+genMaxwellBoltzmann :: Array U DIM1 Double -> Temperature -> IO (Array U DIM1 Double)
+genMaxwellBoltzmann !ms !t = do
+  let stds = fmap (\mi -> sqrt $ (t*kb/mi)) $ R.toList ms
+  xs <- mapM (\std -> (take 3) `liftM` (normalsIO' (0,std)))  stds  
+  let vs = concat xs
+  return $ R.fromListUnboxed (Z:. length vs) vs
+
+readInitialVel :: FilePath -> IO (Array U DIM1 Double)
+readInitialVel xyz = do 
+  r <- parseFromFile parseMoleculeXYZ xyz
+  case r of
+       Left msg -> error $  show msg
+       Right xs -> do 
+                   let dim = 3*(length xs)
+                   return $ R.fromListUnboxed (Z:.dim) $ concatMap snd xs 
+       
 -- ===================> <==================
 -- | String to Nuclear Charge
 atom2Mass :: M.Map String Double 
