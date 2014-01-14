@@ -211,7 +211,6 @@ processMolcasTinker opts = do
   initData <- parseFileInput parseInput input
   let getter  = (initData ^.)
       project = getter getProject
-  tinkerQMMM            <- parserXYZFile tinkerXYZ
   atomsQM               <- parserKeyFile tinkerKey
   molcasInput           <- parseMolcasInputFile molcasFile
   (initialMol,molcasQM) <- initializeMolcasTinker molcasFile (getter getInitialState) temp $ length atomsQM

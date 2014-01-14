@@ -35,8 +35,8 @@ data MolcasInput a =  Command  a | ESPF a | Gateway a | Seward a | RasSCF Int a 
 instance Show (MolcasInput String) where 
   show (Command x)    = ">> "        ++ x ++ "\n"
   show (Gateway x)    = "\n\n" ++ "&Gateway\n" ++ x ++ "\n"
-  show (Seward  x)    = "&Seward\n"  ++ x
-  show (ESPF    x)    = "&ESPF"      ++ x
+  show (Seward  x)    = "&Seward\n"  ++ x ++ "\n"
+  show (ESPF    x)    = "&ESPF\n"      ++ x
   show (RasSCF n x y) = "&Rasscf\n"  ++ x ++ "rlxroot=" ++ show n ++ y
   show (MCLR    x)    = "&Mclr\n"    ++ x
   show (Slapaf  x)    = "&Slapaf\n"  ++ x
