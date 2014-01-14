@@ -372,7 +372,16 @@ tullyDriver dt aMatrix step mol =
 
 
 processGateway :: Options -> IO ()
-processGateway opts =undefined
+processGateway opts =do
+  let files@[tinkerKey,tinkerXYZ,molcasFile] =  optInput opts  
+      (project,_)  = break (=='.') molcasFile
+  atomsQM          <- parserKeyFile tinkerKey  
+  tinkerQMMM       <- parserXYZFile tinkerXYZ
+  molcasInput      <- parseMolcasInputFile molcasFile
+  mol <- tinker2Molecule atomsQM tinkerQMMM defaultMol  
+  let  numat       = length atomsQM
+  molcasQM   <- parserInputMolcasQM molcasFile $ parserGatewayQM numat
+  modifyMolcasInput molcasInput molcasQM project $ mol   
    
 processConstrained :: Options -> IO ()
 processConstrained = undefined
