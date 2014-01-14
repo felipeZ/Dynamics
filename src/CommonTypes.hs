@@ -30,17 +30,18 @@ instance Show TheoryLevel where
     show HF                                      = "HF"
     show Unspecified                             = "Unspecified"
  
-data MolcasInput a =  Command  a |  Gateway a | Seward a | RasSCF Int a a | MCLR a | Alaska a deriving (Functor)
+data MolcasInput a =  Command  a | ESPF a | Gateway a | Seward a | RasSCF Int a a | MCLR a | Slapaf a | Alaska a deriving (Functor)
 
 instance Show (MolcasInput String) where 
   show (Command x)    = ">> "        ++ x ++ "\n"
-  show (Gateway x)    = "&Gateway\n" ++ x
+  show (Gateway x)    = "\n\n" ++ "&Gateway\n" ++ x ++ "\n"
   show (Seward  x)    = "&Seward\n"  ++ x
+  show (ESPF    x)    = "&ESPF"      ++ x
   show (RasSCF n x y) = "&Rasscf\n"  ++ x ++ "rlxroot=" ++ show n ++ y
-  show (MCLR    x)    = "&Mclr\n"   ++ x
-  show (Alaska  x)    = "&Alaska\n"  ++ x
- 
-
+  show (MCLR    x)    = "&Mclr\n"    ++ x
+  show (Slapaf  x)    = "&Slapaf\n"  ++ x
+  show (Alaska  x)    = "&Alaska\n"  ++ x 
+  
 -- Internal Coordinates types 
 data  InternalCoord = Bond !Int !Int | Angle !Int !Int !Int | Dihedral !Int !Int ! Int !Int deriving Show                          
 type Connections = V.Vector InternalCoord

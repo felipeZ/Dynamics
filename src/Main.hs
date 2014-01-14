@@ -129,18 +129,17 @@ printFiles opts@Options { optInput = files, optDataDir = datadir } = do
 -- =========================>  Test API <=====================          
 processPrueba :: Options -> IO ()
 processPrueba opts = do
-  let temp = fromMaybe 298 $ optTemperature opts
-      files@[xyz,velxyz,molcasFile,input] =  optInput opts
-  initData <- parseFileInput parseInput input
-  let getter   = (initData ^.)
-      project  = getter getProject
-  molVel       <- initializeMolcasOntheFly xyz (getter getInitialState) temp
-  vs           <- readInitialVel velxyz
-  molcasInput  <- parseMolcasInputFile molcasFile
-  let initialMol    = molVel & getVel .~ vs
-  print initialMol
+  let files@[tinkerKey,tinkerXYZ,molcasFile] =  optInput opts  
+      (project,_)  = break (=='.') molcasFile
+  atomsQM          <- parserKeyFile tinkerKey  
+  tinkerQMMM       <- parserXYZFile tinkerXYZ
+  molcasInput      <- parseMolcasInputFile molcasFile
+  mol <- tinker2Molecule atomsQM tinkerQMMM defaultMol  
+  let  numat       = length atomsQM
+  molcasQM   <- parserInputMolcasQM molcasFile $ parserGatewayQM numat
+  modifyMolcasInput molcasInput molcasQM project $ mol          
             
-            
+                   
 -- =============> Drivers to run the molecular dynamics simulations in Molcas <==============
 
 processMolcas :: Options -> IO ()
@@ -373,32 +372,11 @@ tullyDriver dt aMatrix step mol =
 
 
 processGateway :: Options -> IO ()
-processGateway opts = do
-  let files@[tinkerKey,tinkerXYZ,molcasFile] =  optInput opts      
-      (project,_) = break (=='.') molcasFile
-  tinkerQMMM    <- parserXYZFile tinkerXYZ
-  atomsQM       <- parserKeyFile tinkerKey
-  molcasInput   <- parseMolcasInputFile molcasFile
-  (initialMol,molcasQM) <- initializeMolcasTinker molcasFile S0 300 $ length atomsQM -- a default 
-  modifyMolcasInput molcasInput molcasQM project initialMol
+processGateway opts =undefined
    
 processConstrained :: Options -> IO ()
 processConstrained = undefined
--- processConstrained opts@Options { optInput = (file:_)} =
---   do  let n1 = pred 16
---           n2 = pred 23
---           norm = 5.0e-9 -- force in nanoNewton 
---       mol <- parseJob defaultMol{getAtoms=labels} job file
---       r <- parseGaussianCheckpoint file          
---       driverConstrainedOptimizer job "azoCis_5nN" mol (16,23) norm   
---            
---   where job = (Gaussian theory)
---         theory = "cam-b3lyp/6-311+g(d,p)"          
---         labels = ["c","c","c","c","c","c","n","n","c","c","c","c","c","c","H","H","H","H","H","H","H","H","H","H"]
---         numat = length labels
---         fun x = case x of
---                      RGauBlock label _n _xs -> if (words label) == ["Cartesian","Force","Constants"] then True else False
---                      otherwise -> False
+
 
  
 

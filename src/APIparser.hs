@@ -267,21 +267,24 @@ modifyMolcasInput inputData molcasQM project mol = do
        
        
 writeGateway :: [AtomQM] -> Molecule -> MolcasInput String
-writeGateway atoms mol = Gateway $ concat $ DL.zipWith3 fun xs symbols atoms
+writeGateway atoms mol = Gateway $ concat $ DL.zipWith3 fun xs atoms [1..]
 
-  where xs        = lines $ showCoord mol
+  where xs        = fmap printxyz $ chunksOf 3 qs
+        printxyz [x,y,z] = printf "%12.5f  %.5f  %.5f" x y z
+        qs        = mol ^. getCoord . to R.toList
         symbols   = mol ^. getAtoms
         between x = " Basis set\n" ++ x ++ " End of Basis\n"
         spaces    = (" "++)
         ans       = spaces . (++"     Angstrom\n")
         mm        = spaces . (++"...... / MM\n")
-        fun :: String -> Label -> AtomQM -> String
-        fun x s (AtomQM label _xyz typo) = 
-                case typo of
-                     QM basis -> between $  s ++ "." ++ basis ++ "\n" ++ (ans x)
-                     MM -> between $ (mm s) ++ (ans x) ++ " Charge=  -0.000000\n" 
-                                             
-                        
+        fun :: String -> AtomQM -> Int -> String
+        fun x (AtomQM label _xyz typo) i = 
+                let num = label ++ (show i)
+                in case typo of
+                     QM basis -> between $  (spaces label)  ++ "." ++ basis ++ "\n" ++ (ans $ num ++ x)
+                     MM -> between $ (mm label) ++ (ans $ num ++ x) ++ " Charge=  -0.000000\n"                                          
+        
+        
 parseMolcas :: Project -> [Label] -> Molecule -> IO Molecule
 parseMolcas project labels mol = do
   pairs <- takeInfoMolcas labels <=< parseMolcasOutputFile $ project ++ ".out"
@@ -623,7 +626,8 @@ printData mol step logger = do
         
 showCoord :: Molecule -> String
 showCoord mol  = concat $ DL.zipWith fun labels xs 
-  where labels = mol^.getAtoms
+  where labels = if null ls then repeat "" else ls
+        ls =  mol^.getAtoms
         qs = mol^.getCoord
         xs = chunksOf 3 . R.toList . computeUnboxedS . R.map (*a0) $  qs
         fun l x  = (printf "%s" l) ++ (printxyz x) ++ "\n"

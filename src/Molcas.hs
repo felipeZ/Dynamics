@@ -149,9 +149,11 @@ parseInputSection :: MyParser MolState (MolcasInput String)
 parseInputSection =    try parserInputCommand
                    <|> try parserGateway
                    <|> try parserSeward
+                   <|> try parserESPF
                    <|> try parserCasscf
                    <|> try parserMclr
                    <|> try parserAlaska
+                   <|> try parserSlapaf
                    <?> "I don't know which Molcas Module are you talking about, is it Swedish?"  
 
 parserInputCommand :: MyParser MolState (MolcasInput String )
@@ -162,21 +164,32 @@ parserInputCommand = do
 parserGateway :: MyParser MolState (MolcasInput String )
 parserGateway = do
                 manyTill anyChar $ char '&'
-                oneOf ['G','g'] >> anyLine
+                try (string "GAT") <|> try (string "Gat") <|> try (string "gat")
+                anyLine
                 Gateway <$> (takeUntilSymbols ['&'])
 
 parserSeward :: MyParser MolState (MolcasInput String )
 parserSeward = do
                manyTill anyChar $ char '&'
-               oneOf ['S','s'] >> anyLine
+               try (string "SEW") <|> try (string "Sew") <|> try (string "sew")
+               anyLine
                Seward <$> (takeUntilSymbols ['&'])
+
+parserESPF   :: MyParser MolState (MolcasInput String )
+parserESPF = do
+               manyTill anyChar $ char '&'
+               try (string "ESPF") <|> try (string "Espf") <|> try (string "espf")
+               anyLine
+               ESPF <$> (takeUntilSymbols ['&'])
 
 parserCasscf :: MyParser MolState (MolcasInput String )
 parserCasscf = do
                manyTill anyChar $ char '&'
-               oneOf ['R','r'] >> anyLine
-               ini  <- manyTill anyChar (try (string "rlxroot") <|> try (string "Rlxroot") <?> "expecting Relax Root keyword" )
-               spaces >> char '=' >> spaces
+               try (string "RAS") <|> try (string "Ras") <|> try (string "ras")
+               anyLine
+               ini  <- manyTill anyChar (try (string "rlxroot") <|> try (string "Rlxroot") <|> try (string "RlxRoot"))
+               manyTill anyChar $  (try $ char '=') <|> newline
+               spaces 
                n    <- intNumber
                rest <- takeUntilSymbols ['&']
                return $ RasSCF n ini rest
@@ -184,15 +197,24 @@ parserCasscf = do
 parserMclr :: MyParser MolState (MolcasInput String )
 parserMclr = do
              manyTill anyChar $ char '&'
-             oneOf ['M','m'] >> anyLine
+             try (string "MCL") <|> try (string "Mcl") <|> try (string "mcl")
+             anyLine
              MCLR <$> (takeUntilSymbols ['&'])
              
-
+parserSlapaf :: MyParser MolState (MolcasInput String )
+parserSlapaf = do
+             manyTill anyChar $ char '&'
+             try (string "SLA") <|> try (string "Sla") <|> try (string "sla")
+             anyLine
+             fmap Slapaf $  (try $ takeUntilSymbols ['&']) <|> manyTill anyChar (try eof)
+               
+             
 parserAlaska :: MyParser MolState (MolcasInput String )
 parserAlaska = do
                manyTill anyChar $ char '&'
-               (oneOf ['A','a']) >> anyLine
-               return $ Alaska ""
+               try (string "ALA") <|> try (string "Ala") <|> try (string "ala")
+               anyLine
+               fmap Alaska $ (try $ takeUntilSymbols ['&']) <|> manyTill anyChar (try eof)
 --                manyTill anyChar $ try (oneOf ['&','>']) <|> try eof  
 
 
