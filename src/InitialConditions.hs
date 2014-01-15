@@ -65,6 +65,13 @@ parseFileInput parser fileName = do
        Left msg -> fail $ show msg
        Right xs -> return xs
 
+parseFilePrueba :: Show a => MyParser () a -> FilePath ->  IO ()
+parseFilePrueba parser fileName = do
+  r <- parseFromFile parser fileName 
+  case r of
+       Left msg -> fail $ show msg
+       Right xs -> print xs
+       
 parseInput :: MyParser () InitialDynamics
 parseInput = do 
   elecSt          <- parserElectronicState
@@ -158,8 +165,7 @@ parserProject = option [] $ try $ do
   spaces
   try (string "Project") <|> try (string "project")
   parseEqual
-  project <- manyTill anyChar space
-  anyLine
+  project <- try (manyTill anyChar space) <|> manyTill anyChar eof
   return project
                        
 parseKeyword :: MyParser () String

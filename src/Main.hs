@@ -130,16 +130,12 @@ printFiles opts@Options { optInput = files, optDataDir = datadir } = do
 -- =========================>  Test API <=====================          
 processPrueba :: Options -> IO ()
 processPrueba opts = do
-  let files@[tinkerKey,tinkerXYZ,molcasFile] =  optInput opts  
-      (project,_)  = break (=='.') molcasFile
-  atomsQM          <- parserKeyFile tinkerKey  
-  tinkerQMMM       <- parserXYZFile tinkerXYZ
-  molcasInput      <- parseMolcasInputFile molcasFile
-  mol <- tinker2Molecule atomsQM tinkerQMMM defaultMol  
-  let  numat       = length atomsQM
-  molcasQM   <- parserInputMolcasQM molcasFile $ parserGatewayQM numat
-  modifyMolcasInput molcasInput molcasQM project $ mol          
-            
+  let temp = fromMaybe 298 $ optTemperature opts
+      files@[xyz,molcasFile,input] =  optInput opts
+  initData <- parseFileInput parseInput input
+  let getter  = (initData ^.)
+      project = getter getProject
+  print project            
                    
 -- =============> Drivers to run the molecular dynamics simulations in Molcas <==============
 
