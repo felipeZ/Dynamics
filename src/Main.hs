@@ -1,4 +1,4 @@
-
+{-# Language RankNTypes #-}
 -- HsDynamics: 
 
 -- @2013 Felipe Zapata, Alessio Valentini, Angel Alvarez from The ResMol Group  
@@ -11,7 +11,7 @@ import Data.Complex
 import Data.Maybe ( fromMaybe )
 import Control.Concurrent
 import Control.Concurrent.Async
-import Control.Lens ((.~),(^.),(&),to)
+import Control.Lens ((.~),(^.),(&),Getting(..),to)
 import Control.Monad ((<=<),liftM,zipWithM_)
 import Control.Monad.Trans.Either
 import System.Environment ( getArgs )
@@ -49,11 +49,12 @@ authors = "@2013  Felipe Zapata, Alessio Valentini, Angel Alvarez"
 -- default options
 defaultOptions    = Options
  { optDump        = False
- , optModules     = [("constrained",processConstrained),("externalForces",processExternalForces),("molcas",processMolcas),
-                     ("palmeiro",processPalmeiro),("molcasTinker",processMolcasTinker),("molcasZeroVel",processMolcasZeroVelocity),
-                     ("molcasVel",processMolcasVel),("externalForcesVel",processExternalForcesVel),  
-                     ("velocityVerlet",processVerlet),("restartExternalForces",processRestartGauss),
-                     ("rewriteGateway",processGateway),("prueba",processPrueba)]
+ , optModules     = [("gaussTully",processExternalForcesVel), ("molcasTully",processMolcas),                                           
+                     ("verletGaussian",processVerletGaussian),("verletMolcas",processVerletMolcas), 
+                     ("molcasVel",processMolcasVel),("restartGaussTully",processRestartGauss),
+                     ("molcasTinker",processMolcasTinker),("molcasZeroVel",processMolcasZeroVelocity),                     
+                     ("palmeiro",processPalmeiro), ("rewriteGateway",processGateway),
+                     ("constrained",processConstrained),("prueba",processPrueba)]
                      
  , optMode        = Nothing
  , optVerbose     = False
@@ -268,28 +269,42 @@ palmeiroLoop  mol dt t thermo job project step loggers = do
 processRestartGauss ::  Options -> IO ()
 processRestartGauss opts = undefined
 
--- | constant energy molecular dynamics 
-processVerlet ::  Options -> IO ()
-processVerlet opts = do
+processVerletMolcas :: Options -> IO ()
+processVerletMolcas opts = do
+  let temp = fromMaybe 298 $ optTemperature opts
+      files@[xyz,molcasFile,input] =  optInput opts
+  initData <- parseFileInput parseInput input
+  let getter  = (initData ^.)
+      project = getter getProject
+  mol         <- initializeMolcasOntheFly xyz (getter getInitialState) temp
+  molcasInput <- parseMolcasInputFile molcasFile
+  let job           = Molcas molcasInput
+  processVerlet getter opts job project mol
+
+processVerletGaussian :: Options -> IO ()
+processVerletGaussian opts = do
   let temp = fromMaybe 298 $ optTemperature opts
       [input,fchk,out] = optInput opts 
   initData <- parseFileInput parseInput input
-  let getter = (initData ^.)
-  mol <- (updateMultiStates out) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp
-  let numat         = mol ^. getAtoms . to length
-      thermo        = initializeThermo numat temp
-      [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
-      aMatrix       = initialAMTX mol 
-      step          = 1
+  let getter  = (initData ^.)
+      project = "TullyExternalForces"
       theoryLevels  = getter getTheory
       basis         = getter getBasis
       job           = Gaussian (theoryLevels,basis)
-      project       = "TullyExternalForces"
+  mol <- (updateMultiStates out) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp    
+  processVerlet getter opts job project mol
+
+processVerlet :: (forall a. Getting a InitialDynamics a -> a) -> Options -> Job ->  Project -> Molecule -> IO ()
+processVerlet getter opts job project mol = do
+  let numat         = mol ^. getAtoms . to length
+      [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
+      aMatrix       = initialAMTX mol 
+      step          = 1
   newMol  <- interactWith job project mol
   loggers <- mapM initLogger ["geometry.out", "result.out"] 
   driverVerlet newMol job auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
   mapM_ logStop loggers
-  
+
 driverVerlet ::  Molecule -> Job -> Time -> DT-> Anchor -> Double -> MatrixCmplx -> Int -> Project  -> [Logger] -> IO () 
 driverVerlet mol job time dt anchor externalForce aMatrix step project loggers = do
    if time < 0.0 then return ()
