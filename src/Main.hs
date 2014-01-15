@@ -49,9 +49,9 @@ authors = "@2013  Felipe Zapata, Alessio Valentini, Angel Alvarez"
 -- default options
 defaultOptions    = Options
  { optDump        = False
- , optModules     = [("gaussTully",processExternalForcesVel), ("molcasTully",processMolcas),                                           
+ , optModules     = [("gaussTully",processGauss), ("molcasTully",processMolcas),                                           
                      ("verletGaussian",processVerletGaussian),("verletMolcas",processVerletMolcas), 
-                     ("molcasVel",processMolcasVel),("restartGaussTully",processRestartGauss),
+                     ("molcasVel",processMolcasVel),("gaussVel",processGaussVel),
                      ("molcasTinker",processMolcasTinker),("molcasZeroVel",processMolcasZeroVelocity),                     
                      ("palmeiro",processPalmeiro), ("rewriteGateway",processGateway),
                      ("constrained",processConstrained),("prueba",processPrueba)]
@@ -148,43 +148,32 @@ processMolcas opts = do
   let temp = fromMaybe 298 $ optTemperature opts
       files@[xyz,molcasFile,input] =  optInput opts
   initData <- parseFileInput parseInput input
-  let getter   = (initData ^.)
-      project  = getter getProject
+  let getter   = (initData ^.)      
   initialMol   <- initializeMolcasOntheFly xyz (getter getInitialState) temp
-  molcasInput  <- parseMolcasInputFile molcasFile
-  let numat         = initialMol ^. getAtoms . to length
-      [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
-      thermo        = initializeThermo numat temp
-      step          = 1
-      job           = Molcas molcasInput
-      aMatrix       = initialAMTX initialMol
-  mol <- interactWith job project initialMol
-  loggers <- mapM initLogger ["geometry.out", "result.out"]
-  constantForceDynamics mol job thermo temp auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
-  mapM_ logStop loggers
-
+  molcasDriver getter opts initialMol
+  
+processVerletMolcas :: Options -> IO ()
+processVerletMolcas opts = do
+  let temp = fromMaybe 298 $ optTemperature opts
+      files@[xyz,molcasFile,input] =  optInput opts
+  initData <- parseFileInput parseInput input
+  let getter  = (initData ^.)
+      project = getter getProject
+  mol         <- initializeMolcasOntheFly xyz (getter getInitialState) temp
+  molcasInput <- parseMolcasInputFile molcasFile
+  let job           = Molcas molcasInput
+  processVerlet getter opts job project mol
+  
 processMolcasVel :: Options -> IO ()  
 processMolcasVel opts = do
   let temp = fromMaybe 298 $ optTemperature opts
       files@[xyz,velxyz,molcasFile,input] =  optInput opts
   initData <- parseFileInput parseInput input
-  let getter   = (initData ^.)
-      project  = getter getProject
-  molVel       <- initializeMolcasOntheFly xyz (getter getInitialState) temp
-  vs           <- readInitialVel velxyz
-  molcasInput  <- parseMolcasInputFile molcasFile
-  let initialMol    = molVel & getVel .~ vs
-      numat         = initialMol ^. getAtoms . to length
-      [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
-      thermo        = initializeThermo numat temp
-      step          = 1
-      job           = Molcas molcasInput
-      aMatrix       = initialAMTX initialMol
-  mol <- interactWith job project initialMol
-  loggers <- mapM initLogger ["geometry.out", "result.out"]
-  constantForceDynamics mol job thermo temp auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
-  mapM_ logStop loggers
-  
+  let getter = (initData ^.)
+  mol        <- initializeMolcasOntheFly xyz (getter getInitialState) temp
+  vs         <- readInitialVel velxyz
+  molcasDriver getter opts $ mol & getVel .~ vs   
+
 processMolcasZeroVelocity :: Options -> IO ()
 processMolcasZeroVelocity opts = do
   let temp = fromMaybe 298 $ optTemperature opts
@@ -193,18 +182,26 @@ processMolcasZeroVelocity opts = do
   let getter   = (initData ^.)
       project  = getter getProject
   initialMol  <- initializeMolcasZeroVel xyz (getter getInitialState) temp
-  molcasInput <- parseMolcasInputFile molcasFile
-  let numat = initialMol ^. getAtoms . to length
+  molcasDriver getter opts initialMol
+  
+molcasDriver :: (forall a. Getting a InitialDynamics a -> a) -> Options -> Molecule -> IO ()
+molcasDriver getter opts initialMol = do 
+  let temp = fromMaybe 298 $ optTemperature opts
+      files@[xyz,molcasFile,input] =  optInput opts
+  molcasInput  <- parseMolcasInputFile molcasFile
+  let numat         = initialMol ^. getAtoms . to length
       [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
       thermo        = initializeThermo numat temp
       step          = 1
       job           = Molcas molcasInput
       aMatrix       = initialAMTX initialMol
+      project  = getter getProject
   mol <- interactWith job project initialMol
   loggers <- mapM initLogger ["geometry.out", "result.out"]
-  constantForceDynamics mol job thermo temp auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers 
+  constantForceDynamics mol job thermo temp auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
   mapM_ logStop loggers
-  
+        
+-- | Molcas Tinker Interface         
 processMolcasTinker :: Options -> IO ()
 processMolcasTinker opts = do
   let temp = fromMaybe 298 $ optTemperature opts
@@ -233,7 +230,107 @@ driverMolcasTinker mol t dt temp thermo job project step loggers =
             (newMol,newThermo) <- dynamicNoseHoover mol dt temp thermo job project
             driverMolcasTinker newMol (t-dt) dt temp newThermo job project (succ step) loggers
             
--- =============> Drivers to call Palmeiro Interpolator <======================================
+-- =============> Functions to run the molecular dynamics simulations in Gaussian <==============
+
+processVerletGaussian :: Options -> IO ()
+processVerletGaussian opts = do
+  let temp = fromMaybe 298 $ optTemperature opts
+      [input,fchk,out] = optInput opts 
+  initData <- parseFileInput parseInput input
+  let getter  = (initData ^.)
+      project = "TullyExternalForces"
+      theoryLevels  = getter getTheory
+      basis         = getter getBasis
+      job           = Gaussian (theoryLevels,basis)
+  mol <- (updateMultiStates out) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp    
+  processVerlet getter opts job project mol
+
+-- | on the fly molecular dynamics with applied external forces
+processGauss :: Options -> IO ()
+processGauss opts = do
+  let temp = fromMaybe 298 $ optTemperature opts
+      [input,fchk,out] = optInput opts 
+  initData <- parseFileInput parseInput input
+  let getter = (initData ^.)
+  mol <- (updateMultiStates out) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp
+  driverGaussian getter opts mol  
+
+-- | user supplied initial velocities are used
+processGaussVel :: Options -> IO ()
+processGaussVel opts = do
+  let temp = fromMaybe 298 $ optTemperature opts
+      [input,fchk,out,velxyz] = optInput opts 
+  initData   <- parseFileInput parseInput input
+  let getter = (initData ^.)
+  mol        <- (updateMultiStates out) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp
+  vs         <- readInitialVel velxyz
+  driverGaussian getter opts $ mol & getVel .~ vs   
+    
+driverGaussian :: (forall a. Getting a InitialDynamics a -> a) -> Options -> Molecule -> IO ()
+driverGaussian getter opts mol = do
+  let temp = fromMaybe 298 $ optTemperature opts
+      numat         = mol ^. getAtoms . to length
+      thermo        = initializeThermo numat temp
+      [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
+      aMatrix       = initialAMTX mol 
+      step          = 1
+      theoryLevels  = getter getTheory
+      basis         = getter getBasis
+      job           = Gaussian (theoryLevels,basis)
+      project       = "TullyExternalForces"
+  newMol  <- interactWith job project mol
+  loggers <- mapM initLogger ["geometry.out", "result.out"] 
+  constantForceDynamics newMol job thermo temp auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
+  mapM_ logStop loggers      
+                                   
+-- ==================> General Drivers <=================================  
+  
+processVerlet :: (forall a. Getting a InitialDynamics a -> a) -> Options -> Job ->  Project -> Molecule -> IO ()
+processVerlet getter opts job project mol = do
+  let numat         = mol ^. getAtoms . to length
+      [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
+      aMatrix       = initialAMTX mol 
+      step          = 1
+  newMol  <- interactWith job project mol
+  loggers <- mapM initLogger ["geometry.out", "result.out"] 
+  driverVerlet newMol job auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
+  mapM_ logStop loggers
+
+driverVerlet ::  Molecule -> Job -> Time -> DT-> Anchor -> Double -> MatrixCmplx -> Int -> Project  -> [Logger] -> IO () 
+driverVerlet mol job time dt anchor externalForce aMatrix step project loggers = do
+   if time < 0.0 then return ()
+                 else do 
+                  let es = concatMap (printf "%.6f  ") $ mol ^. getEnergy . to head
+                  zipWithM_ ($) [printMol mol es, printData mol step] loggers                                         
+                  newMol                <- velocityVerletForces mol dt job project anchor externalForce
+                  (tullyMol,newAmatrix) <- tullyDriver dt aMatrix step newMol
+                  printGnuplot newAmatrix tullyMol
+                  let [oldRoot,newRoot] = (^.getElecSt) `fmap` [newMol,tullyMol]
+                      newJob            =  if oldRoot == newRoot then job else updateNewJobInput job tullyMol
+                  driverVerlet tullyMol newJob (time-dt) dt anchor externalForce newAmatrix (succ step) project loggers
+
+  
+constantForceDynamics ::  Molecule -> Job -> Thermo -> Temperature -> Time -> DT-> Anchor -> Double -> MatrixCmplx -> Int -> Project  -> [Logger] -> IO ()
+constantForceDynamics mol job thermo temp time dt anchor externalForce aMatrix step project loggers = do
+   if time < 0.0 then return ()
+                 else do 
+                  let es = concatMap (printf "%.6f  ") $ mol ^. getEnergy . to head
+                  zipWithM_ ($) [printMol mol es, printData mol step] loggers                                         
+                  (newMol,newThermo)    <- dynamicExternalForces mol dt temp thermo job project anchor externalForce
+                  (tullyMol,newAmatrix) <- tullyDriver dt aMatrix step newMol
+                  printGnuplot newAmatrix tullyMol
+                  let [oldRoot,newRoot] = (^.getElecSt) `fmap` [newMol,tullyMol]
+                      newJob            =  if oldRoot == newRoot then job else updateNewJobInput job tullyMol
+                  constantForceDynamics tullyMol newJob newThermo temp (time-dt) dt anchor externalForce newAmatrix (succ step) project loggers
+
+-- | Fewest Switches Tully Algorithm using Persico-Granucci Correction 
+tullyDriver ::  DT -> MatrixCmplx -> Int ->  Molecule -> IO (Molecule,MatrixCmplx)
+tullyDriver dt aMatrix step mol =
+  if (mol^. getCoeffCI . to length) /= 3  -- At least 3 set of CI coefficients are required in oder to initialize the Tully
+     then return (mol,aMatrix) 
+     else tullyHS dt aMatrix step mol
+
+  -- =============> Drivers to call Palmeiro Interpolator <======================================
 
 -- | Molecular Dynamics using interpolated PES 
 processPalmeiro :: Options -> IO ()
@@ -262,129 +359,11 @@ palmeiroLoop  mol dt t thermo job project step loggers = do
                   zipWithM_ ($) [printMol mol "", printData mol step] loggers                                         
                   return ()
 --                   palmeiroLoop newMol dt (t - dt) newThermo job project (succ step) loggers
-             else return ()
-
--- =============> Drivers to run the molecular dynamics simulations in Gaussian <==============
-
-processRestartGauss ::  Options -> IO ()
-processRestartGauss opts = undefined
-
-processVerletMolcas :: Options -> IO ()
-processVerletMolcas opts = do
-  let temp = fromMaybe 298 $ optTemperature opts
-      files@[xyz,molcasFile,input] =  optInput opts
-  initData <- parseFileInput parseInput input
-  let getter  = (initData ^.)
-      project = getter getProject
-  mol         <- initializeMolcasOntheFly xyz (getter getInitialState) temp
-  molcasInput <- parseMolcasInputFile molcasFile
-  let job           = Molcas molcasInput
-  processVerlet getter opts job project mol
-
-processVerletGaussian :: Options -> IO ()
-processVerletGaussian opts = do
-  let temp = fromMaybe 298 $ optTemperature opts
-      [input,fchk,out] = optInput opts 
-  initData <- parseFileInput parseInput input
-  let getter  = (initData ^.)
-      project = "TullyExternalForces"
-      theoryLevels  = getter getTheory
-      basis         = getter getBasis
-      job           = Gaussian (theoryLevels,basis)
-  mol <- (updateMultiStates out) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp    
-  processVerlet getter opts job project mol
-
-processVerlet :: (forall a. Getting a InitialDynamics a -> a) -> Options -> Job ->  Project -> Molecule -> IO ()
-processVerlet getter opts job project mol = do
-  let numat         = mol ^. getAtoms . to length
-      [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
-      aMatrix       = initialAMTX mol 
-      step          = 1
-  newMol  <- interactWith job project mol
-  loggers <- mapM initLogger ["geometry.out", "result.out"] 
-  driverVerlet newMol job auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
-  mapM_ logStop loggers
-
-driverVerlet ::  Molecule -> Job -> Time -> DT-> Anchor -> Double -> MatrixCmplx -> Int -> Project  -> [Logger] -> IO () 
-driverVerlet mol job time dt anchor externalForce aMatrix step project loggers = do
-   if time < 0.0 then return ()
-                 else do 
-                  let es = concatMap (printf "%.6f  ") $ mol ^. getEnergy . to head
-                  zipWithM_ ($) [printMol mol es, printData mol step] loggers                                         
-                  newMol                <- velocityVerletForces mol dt job project anchor externalForce
-                  (tullyMol,newAmatrix) <- tullyDriver dt aMatrix step newMol
-                  printGnuplot newAmatrix tullyMol
-                  let [oldRoot,newRoot] = (^.getElecSt) `fmap` [newMol,tullyMol]
-                      newJob            =  if oldRoot == newRoot then job else updateNewJobInput job tullyMol
-                  driverVerlet tullyMol newJob (time-dt) dt anchor externalForce newAmatrix (succ step) project loggers
-
--- | on the fly molecular dynamics with applied external forces
-processExternalForcesVel :: Options -> IO ()
-processExternalForcesVel opts = do
-  let temp = fromMaybe 298 $ optTemperature opts
-      [input,fchk,out] = optInput opts 
-  initData <- parseFileInput parseInput input
-  let getter = (initData ^.)
-  mol <- (updateMultiStates out) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp
-  let numat         = mol ^. getAtoms . to length
-      thermo        = initializeThermo numat temp
-      [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
-      aMatrix       = initialAMTX mol 
-      step          = 1
-      theoryLevels  = getter getTheory
-      basis         = getter getBasis
-      job           = Gaussian (theoryLevels,basis)
-      project       = "TullyExternalForces"
-  newMol  <- interactWith job project mol
-  loggers <- mapM initLogger ["geometry.out", "result.out"] 
-  constantForceDynamics newMol job thermo temp auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
-  mapM_ logStop loggers                   
-                  
--- | on the fly molecular dynamics with applied external forces
-processExternalForces :: Options -> IO ()
-processExternalForces opts = do
-  let temp = fromMaybe 298 $ optTemperature opts
-      [input,fchk,out] = optInput opts 
-  initData <- parseFileInput parseInput input
-  let getter = (initData ^.)
-  mol <- (updateMultiStates out) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp
-  let numat         = mol ^. getAtoms . to length
-      thermo        = initializeThermo numat temp
-      [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
-      aMatrix       = initialAMTX mol 
-      step          = 1
-      theoryLevels  = getter getTheory
-      basis         = getter getBasis
-      job           = Gaussian (theoryLevels,basis)
-      project       = "TullyExternalForces"
-  newMol  <- interactWith job project mol
-  loggers <- mapM initLogger ["geometry.out", "result.out"] 
-  constantForceDynamics newMol job thermo temp auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
-  mapM_ logStop loggers       
-  
-constantForceDynamics ::  Molecule -> Job -> Thermo -> Temperature -> Time -> DT-> Anchor -> Double -> MatrixCmplx -> Int -> Project  -> [Logger] -> IO ()
-constantForceDynamics mol job thermo temp time dt anchor externalForce aMatrix step project loggers = do
-   if time < 0.0 then return ()
-                 else do 
-                  let es = concatMap (printf "%.6f  ") $ mol ^. getEnergy . to head
-                  zipWithM_ ($) [printMol mol es, printData mol step] loggers                                         
-                  (newMol,newThermo)    <- dynamicExternalForces mol dt temp thermo job project anchor externalForce
-                  (tullyMol,newAmatrix) <- tullyDriver dt aMatrix step newMol
-                  printGnuplot newAmatrix tullyMol
-                  let [oldRoot,newRoot] = (^.getElecSt) `fmap` [newMol,tullyMol]
-                      newJob            =  if oldRoot == newRoot then job else updateNewJobInput job tullyMol
-                  constantForceDynamics tullyMol newJob newThermo temp (time-dt) dt anchor externalForce newAmatrix (succ step) project loggers
-
-  
-tullyDriver ::  DT -> MatrixCmplx -> Int ->  Molecule -> IO (Molecule,MatrixCmplx)
-tullyDriver dt aMatrix step mol =
-  if (mol^. getCoeffCI . to length) /= 3  -- At least 3 set of CI coefficients are required in oder to initialize the Tully
-     then return (mol,aMatrix) 
-     else tullyHS dt aMatrix step mol
-
+             else return ()     
+     
 -- ===================> Miscallaneus Functions <================
 
-
+-- | using a .key and .xyz tinker files a new Molcas input is generated
 processGateway :: Options -> IO ()
 processGateway opts =do
   let files@[tinkerKey,tinkerXYZ,molcasFile] =  optInput opts  
