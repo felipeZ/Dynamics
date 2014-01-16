@@ -8,13 +8,14 @@ module TinkerQMMM (
                    )  where
 
 import Control.Applicative
+import Control.Exception (bracket)
 import Control.Lens
 import Data.Array.Repa as R hiding ((++))
 import Data.List (lookup,unfoldr)
 import Data.List.Split (chunksOf)
 import Data.Maybe (fromMaybe)
 import qualified Data.Vector as V
-import System.Directory (renameFile)
+import System.Directory (renameFile,removeFile)
 import Text.Parsec
 import Text.Parsec.ByteString
 import Text.Printf
@@ -84,8 +85,8 @@ parseLineAtomMM = do
 -- ======================> rewrite XYZ File <============
 
 reWriteXYZtinker :: Molecule -> [(Label,Int)] -> Project ->  IO ()
-reWriteXYZtinker mol atomsQM project = do
-   renameFile (project++".xyz") "temp"
+reWriteXYZtinker mol atomsQM project = 
+   bracket (renameFile (project++".xyz") "temp") (\_ -> removeFile "temp") $ \_ -> do
    tinkerQMMM <- parserXYZFile "temp"
    let coordinates   = chunksOf 3 $ R.toList . R.computeUnboxedS . R.map (*a0) $ mol^.getCoord -- Coordinates are printed in Amstrongs
        numbersQM     =  snd <$> atomsQM  
