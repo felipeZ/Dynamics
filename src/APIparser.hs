@@ -83,12 +83,14 @@ interactWith job project mol =
                  let io1 = writeMolcasXYZ (project ++ ".xyz") mol
                      io2 = writeFile (project ++ ".input") $ concatMap show inputData
                  concurrently io1 io2 
-                 launchMolcasLocal project
+                 launchMolcas project
                  parseMolcas project ["Grad","Roots"] mol
                  
      MolcasTinker inputData atomsQM molcasQM ->  do 
                  print "Update QM atoms"
                  reWriteXYZtinker mol atomsQM project
+                 print mol
+                 return mol
                  print "Launching tinker"
                  launchTinker project
                  print "modifyTinkerNames"

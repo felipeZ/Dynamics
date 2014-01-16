@@ -218,7 +218,8 @@ processMolcasTinker opts = do
       step          = 1
       job           = MolcasTinker molcasInput atomsQM molcasQM
   loggers <- mapM initLogger ["geometry.out", "result.out"]
-  driverMolcasTinker initialMol audt auTime temp thermo job project step loggers
+  mol <- interactWith job project initialMol
+  driverMolcasTinker mol audt auTime temp thermo job project step loggers
   mapM_ logStop loggers 
 
 driverMolcasTinker :: Molecule -> Time -> DT -> Temperature -> Thermo -> Job -> Project -> Step -> [Logger] -> IO ()  
