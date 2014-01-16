@@ -83,7 +83,7 @@ interactWith job project mol =
                  let io1 = writeMolcasXYZ (project ++ ".xyz") mol
                      io2 = writeFile (project ++ ".input") $ concatMap show inputData
                  concurrently io1 io2 
-                 launchMolcas project
+                 launchMolcasLocal project
                  parseMolcas project ["Grad","Roots"] mol
                  
      MolcasTinker inputData atomsQM molcasQM ->  do 
@@ -136,10 +136,8 @@ simpleLoop pid t fun = do
 
 -- | local jobs  
 launchJob :: String -> IO ()
-launchJob script = do
-  exit <- async $ system $ script
-  checkStatus <=< wait $ exit
-
+launchJob script = withAsync (system script) $ wait >=> checkStatus
+  
 -- | Job Status 
 checkStatus :: ExitCode -> IO ()
 checkStatus r =  case r of
@@ -256,6 +254,14 @@ getSuffixFile path suff = do
 
 launchMolcas :: Project ->  IO ()
 launchMolcas project = launchCluster "Molcas" $ project ++ ".input"
+
+launchMolcasLocal :: Project ->  IO ()
+launchMolcasLocal project = do
+   let input = project ++ ".input"
+       out   = project ++ ".out"
+       err   = project ++ ".err"
+   launchJob $ "molcas  " ++ input ++ ">  " ++ out ++ "2>  " ++ err 
+
 
 modifyMolcasInput :: [MolcasInput String] -> [AtomQM] -> Project -> Molecule -> IO ()
 modifyMolcasInput inputData molcasQM project mol = do
