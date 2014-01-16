@@ -179,7 +179,7 @@ updateMolcasInput xs rlxroot = Molcas $ fmap modifyInputRas xs
 -- =======================> Tinker <===========                                                
 launchTinker :: String -> IO ()
 launchTinker project = do
-   let root   ="/home/marco/7.8.dev/tinker-5.1.09/source/dynaqmmm.x"
+   let root   ="/home/marco/7.8.dev/tinker-5.1.09/source/dynaqmmm.x  "
        name   = project ++ ".xyz"                    -- first argument : .xyz file
        suffix = "10  0.1 0.01 298 0.734 0.723 > /dev/null 2>&1"  -- argument : -> step (1) -> dt (default 1) -> dump (default 0.1) -> temperature (298 K)
                                                                  -- -> scaling factor first HLA  -> scaling factor second HLA
