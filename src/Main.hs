@@ -150,7 +150,7 @@ processMolcas opts = do
   initData <- parseFileInput parseInput input
   let getter   = (initData ^.)      
   initialMol   <- initializeMolcasOntheFly xyz (getter getInitialState) temp
-  molcasDriver getter opts initialMol
+  molcasDriver getter opts molcasFile initialMol
   
 processVerletMolcas :: Options -> IO ()
 processVerletMolcas opts = do
@@ -172,7 +172,7 @@ processMolcasVel opts = do
   let getter = (initData ^.)
   mol        <- initializeMolcasOntheFly xyz (getter getInitialState) temp
   vs         <- readInitialVel velxyz
-  molcasDriver getter opts $ mol & getVel .~ vs   
+  molcasDriver getter opts molcasFile $ mol & getVel .~ vs   
 
 processMolcasZeroVelocity :: Options -> IO ()
 processMolcasZeroVelocity opts = do
@@ -182,12 +182,11 @@ processMolcasZeroVelocity opts = do
   let getter   = (initData ^.)
       project  = getter getProject
   initialMol  <- initializeMolcasZeroVel xyz (getter getInitialState) temp
-  molcasDriver getter opts initialMol
+  molcasDriver getter opts molcasFile initialMol
   
-molcasDriver :: (forall a. Getting a InitialDynamics a -> a) -> Options -> Molecule -> IO ()
-molcasDriver getter opts initialMol = do 
+molcasDriver :: (forall a. Getting a InitialDynamics a -> a) -> Options -> FilePath -> Molecule -> IO ()
+molcasDriver getter opts molcasFile initialMol = do 
   let temp = fromMaybe 298 $ optTemperature opts
-      files@[xyz,molcasFile,input] =  optInput opts
   molcasInput  <- parseMolcasInputFile molcasFile
   let numat         = initialMol ^. getAtoms . to length
       [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 

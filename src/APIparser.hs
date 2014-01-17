@@ -91,8 +91,6 @@ interactWith job project mol =
                  reWriteXYZtinker mol atomsQM project
                  print "Launching tinker"
                  launchTinker project
-                 print "modifyTinkerNames"
-                 modifyTinkerNames project
                  print "rewrite Molcas input"
                  modifyMolcasInput inputData molcasQM project mol
                  print "launch Molcas"
@@ -181,17 +179,10 @@ launchTinker :: String -> IO ()
 launchTinker project = do
    let root   ="/home/marco/7.8.dev/tinker-5.1.09/source/dynaqmmm.x  "
        name   = project ++ ".xyz"                    -- first argument : .xyz file
-       suffix = "10  0.1 0.01 298 0.734 0.723 > /dev/null 2>&1"  -- argument : -> step (1) -> dt (default 1) -> dump (default 0.1) -> temperature (298 K)
-                                                                 -- -> scaling factor first HLA  -> scaling factor second HLA
+       suffix = "  10  0.1 0.01 298 0.734 0.723 > /dev/null 2>&1"  -- argument : -> step (1) -> dt (default 1) -> dump (default 0.1) -> temperature (298 K)
+                                                                   -- -> scaling factor first HLA  -> scaling factor second HLA
        job = root ++ name ++ suffix
    launchJob job
-
-
--- | Tinker does not overwrite the .xyz, instead it writes thew new geometry optimization 
---   in a file ended in .xyz_2
-modifyTinkerNames :: Project -> IO ()
-modifyTinkerNames project = renameFile (root ++ "_2") root
-  where root = project ++ ".xyz"
         
         
 -- ======================> Palmeiro <==============
