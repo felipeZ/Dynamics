@@ -51,6 +51,7 @@ defaultOptions    = Options
  { optDump        = False
  , optModules     = [("gaussTully",processGauss), ("molcasTully",processMolcas),                                           
                      ("verletGaussian",processVerletGaussian),("verletMolcas",processVerletMolcas), 
+                     ("verletMolcasVel",processVerletMolcasVel),
                      ("molcasVel",processMolcasVel),("gaussVel",processGaussVel),
                      ("molcasTinker",processMolcasTinker),("molcasZeroVel",processMolcasZeroVelocity),                     
                      ("palmeiro",processPalmeiro), ("rewriteGateway",processGateway),
@@ -161,9 +162,22 @@ processVerletMolcas opts = do
       project = getter getProject
   mol         <- initializeMolcasOntheFly xyz (getter getInitialState) temp
   molcasInput <- parseMolcasInputFile molcasFile
-  let job           = Molcas molcasInput
+  let job     = Molcas molcasInput
   processVerlet getter opts job project mol
-  
+
+processVerletMolcasVel :: Options -> IO ()
+processVerletMolcasVel opts = do
+  let temp = fromMaybe 298 $ optTemperature opts
+      files@[xyz,velxyz,molcasFile,input] =  optInput opts
+  initData <- parseFileInput parseInput input
+  let getter  = (initData ^.)
+      project = getter getProject
+  mol         <- initializeMolcasOntheFly xyz (getter getInitialState) temp
+  vs         <- readInitialVel velxyz
+  molcasInput <- parseMolcasInputFile molcasFile
+  let job     = Molcas molcasInput
+  processVerlet getter opts job project $ mol & getVel .~ vs   
+    
 processMolcasVel :: Options -> IO ()  
 processMolcasVel opts = do
   let temp = fromMaybe 298 $ optTemperature opts
