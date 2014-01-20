@@ -251,7 +251,7 @@ launchMolcasLocal project = do
    let input = project ++ ".input"
        out   = project ++ ".out"
        err   = project ++ ".err"
-   launchJob $ "molcas  " ++ input ++ ">  " ++ out ++ "2>  " ++ err 
+   launchJob $ "molcas  " ++ input ++ ">  " ++ out ++ " 2>  " ++ err 
 
 
 modifyMolcasInput :: [MolcasInput String] -> [AtomQM] -> Project -> Molecule -> IO ()

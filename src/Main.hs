@@ -132,14 +132,9 @@ printFiles opts@Options { optInput = files, optDataDir = datadir } = do
 processPrueba :: Options -> IO ()
 processPrueba opts =  do
   let temp = fromMaybe 298 $ optTemperature opts
-      files@[tinkerKey,tinkerXYZ,molcasFile,input] =  optInput opts      
-  initData <- parseFileInput parseInput input
-  let getter  = (initData ^.)
-      project = getter getProject
-  atomsQM               <- parserKeyFile tinkerKey
-  molcasInput           <- parseMolcasInputFile molcasFile
-  (initialMol,molcasQM) <- initializeMolcasTinker molcasFile (getter getInitialState) temp $ length atomsQM
-  print initialMol
+      files@[molcasFile] =  optInput opts      
+  molcasInput  <- parseMolcasInputFile molcasFile
+  print molcasInput
   
   
 -- =============> Drivers to run the molecular dynamics simulations in Molcas <==============
