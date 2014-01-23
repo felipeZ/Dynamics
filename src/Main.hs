@@ -54,7 +54,7 @@ defaultOptions    = Options
  { optDump        = False
  , optModules     = [("gaussTully",processGauss), ("molcasTully",processMolcas),                                           
                      ("verletGaussian",processVerletGaussian),("verletMolcas",processVerletMolcas), 
-                     ("verletMolcasVel",processVerletMolcasVel),
+                     ("verletMolcasVel",processVerletMolcasVel),("verletGround",processVerletGround)
                      ("molcasVel",processMolcasVel),("gaussVel",processGaussVel),
                      ("molcasTinker",processMolcasTinker),("molcasZeroVel",processMolcasZeroVelocity),                     
                      ("palmeiro",processPalmeiro), ("rewriteGateway",processGateway),
