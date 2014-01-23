@@ -106,6 +106,14 @@ interactWith job project mol =
                  launchJob $ "g09 " ++ input
                  print "Updating Roots info"
                  updateMultiStates out mol
+                 
+     GroundState tupleTheory -> do
+                let [input,out,fchk] = DL.zipWith (++) (repeat project) [".com",".log",".fchk"]
+                writeGaussJob tupleTheory project mol 
+                launchJob $ "g09 " ++ input
+                launchJob $ "formchk " ++ fchk
+                getInfoFCHK ["Grad"] fchk mol                 
+
                             
      Palmeiro conex dirs ->  launchPalmeiro conex dirs mol
        
@@ -635,7 +643,8 @@ writeGaussJob (theory,basis) project mol =  do
       l8 = addNewLines 2 "save the old Farts, use Fortran."
       l9 = addNewLines 1 "0 1"
       atoms = addNewLines 1 $ showCoord mol
-      weights = addNewLines 5 $ " 0.5       0.5"
+      st    = calcElectSt mol 
+      weights = addNewLines 5 $  if st == 0 then "" else " 0.5       0.5"
       result = foldl1 (++) [l1,l2,l3,l6,l7,l8,l9,atoms,weights]
   writeFile (project ++ ".com") result 
                            

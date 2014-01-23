@@ -136,10 +136,15 @@ printFiles opts@Options { optInput = files, optDataDir = datadir } = do
 processPrueba :: Options -> IO ()
 processPrueba opts =  do
   let temp = fromMaybe 298 $ optTemperature opts
-      files@[molcasFile] =  optInput opts      
-  molcasInput  <- parseMolcasInputFile molcasFile
-  print molcasInput
-  
+      files@[input,fchk,out] = optInput opts 
+  initData <- parseFileInput parseInput input
+  let getter  = (initData ^.)
+      theoryLevels  = getter getTheory
+      basis         = getter getBasis
+      job           = Gaussian (theoryLevels,basis)
+  mol <- (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp    
+  print mol
+--   
   
 -- =============> Drivers to run the molecular dynamics simulations in Molcas <==============
 
@@ -278,7 +283,21 @@ processGaussVel opts = do
   mol        <- (updateMultiStates out) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp
   vs         <- readInitialVel velxyz
   driverGaussian getter opts $ mol & getVel .~ vs   
-    
+
+processVerletGround :: Options -> IO ()
+processVerletGround opts = do
+  let temp = fromMaybe 298 $ optTemperature opts
+      files@[input,fchk,out] = optInput opts 
+  initData <- parseFileInput parseInput input
+  let getter  = (initData ^.)
+      theoryLevels = getter getTheory
+      basis        = getter getBasis
+      project      = getter getProject
+      job          = GroundState (theoryLevels,basis)
+  mol <- (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp 
+  processVerlet getter opts job project mol
+ 
+  
 driverGaussian :: (forall a. Getting a InitialDynamics a -> a) -> Options -> Molecule -> IO ()
 driverGaussian getter opts mol = do
   let temp = fromMaybe 298 $ optTemperature opts
@@ -295,7 +314,8 @@ driverGaussian getter opts mol = do
   loggers <- mapM initLogger ["geometry.out", "result.out","totalEnergy.out"]
   constantForceDynamics newMol job thermo temp auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
   mapM_ logStop loggers      
-                                   
+   
+   
 -- ==================> General Drivers <=================================  
   
 processVerlet :: (forall a. Getting a InitialDynamics a -> a) -> Options -> Job ->  Project -> Molecule -> IO ()
@@ -395,11 +415,15 @@ processReadOut opts = do
       state          = S1
   initialMol  <- initializeMolcasOntheFly xyz state 300
   mols <- parserGeomVel out initialMol         
-  let energies = parMap rdeepseq calcTotalEnergy mols
+  let totalS0 = parMap rdeepseq calcTotalEnergy $ (& getElecSt .~ Left S0) `fmap` mols
+      totalS1 = parMap rdeepseq calcTotalEnergy $ (& getElecSt .~ Left S1) `fmap` mols
+      total   = parMap rdeepseq calcTotalEnergy mols
       kinetic  = parMap rdeepseq (\x -> calcEk (x ^. getVel) (x ^. getMass)) mols
-  let a1 = writeFile ("TotalEnergy" ++ show state) $ concatMap (printf "%.5f\n") energies
-      a2 = writeFile ("KineticEnergy" ++ show state) $ concatMap (printf "%.5f\n") kinetic
-  concurrently a1 a2
+  let a1 = writeFile ("TotalEnergyS0") $ concatMap (printf "%.5f\n") totalS0
+      a2 = writeFile ("TotalEnergyS1") $ concatMap (printf "%.5f\n") totalS1
+      a3 = writeFile ("TotalEnergy") $ concatMap (printf "%.5f\n")   total
+      a4 = writeFile ("KineticEnergy") $ concatMap (printf "%.5f\n") kinetic
+  parallelLaunch [a1,a2,a3,a4]
   print "Done"
   
 processConstrained :: Options -> IO ()
