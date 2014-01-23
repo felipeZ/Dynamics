@@ -54,7 +54,7 @@ defaultOptions    = Options
  { optDump        = False
  , optModules     = [("gaussTully",processGauss), ("molcasTully",processMolcas),                                           
                      ("verletGaussian",processVerletGaussian),("verletMolcas",processVerletMolcas), 
-                     ("verletMolcasVel",processVerletMolcasVel),("verletGround",processVerletGround)
+                     ("verletMolcasVel",processVerletMolcasVel),("verletGround",processVerletGround),
                      ("molcasVel",processMolcasVel),("gaussVel",processGaussVel),
                      ("molcasTinker",processMolcasTinker),("molcasZeroVel",processMolcasZeroVelocity),                     
                      ("palmeiro",processPalmeiro), ("rewriteGateway",processGateway),
@@ -139,11 +139,12 @@ processPrueba opts =  do
       files@[input,fchk,out] = optInput opts 
   initData <- parseFileInput parseInput input
   let getter  = (initData ^.)
-      theoryLevels  = getter getTheory
-      basis         = getter getBasis
-      job           = Gaussian (theoryLevels,basis)
-  mol <- (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp    
-  print mol
+      theoryLevels = getter getTheory
+      basis        = getter getBasis
+      project      = getter getProject
+      job          = GroundState (theoryLevels,basis)
+--   mol <- (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp 
+  print initData 
 --   
   
 -- =============> Drivers to run the molecular dynamics simulations in Molcas <==============

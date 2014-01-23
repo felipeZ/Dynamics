@@ -117,8 +117,7 @@ parserTheory = option (Unspecified,"Unspecified") $ do
   try (string "Theory") <|> try (string "theory")
   spaces >> char '=' >> spaces
   theory  <- parseLevel
-  basis   <- manyTill anyChar space
-  anyLine
+  basis   <- manyTill anyChar newline
   return (theory,basis)
   
   where parseLevel = try parserCasMolcas <|> try parserHF <?> "theory level"
