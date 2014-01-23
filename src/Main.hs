@@ -9,8 +9,10 @@ module Main where
 import Data.List (zipWith3)
 import Data.Complex
 import Data.Maybe ( fromMaybe )
+import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Parallel.Strategies (parMap,rdeepseq)
 import Control.Lens ((.~),(^.),(&),Getting(..),to)
 import Control.Monad ((<=<),liftM,zipWithM_)
 import Control.Monad.Trans.Either
@@ -19,6 +21,7 @@ import System.FilePath
 import System.Cmd ( system )
 import System.Console.GetOpt
 import Text.Printf
+
 
 -- Cabal imports
 import Data.Version (showVersion)
@@ -55,6 +58,7 @@ defaultOptions    = Options
                      ("molcasVel",processMolcasVel),("gaussVel",processGaussVel),
                      ("molcasTinker",processMolcasTinker),("molcasZeroVel",processMolcasZeroVelocity),                     
                      ("palmeiro",processPalmeiro), ("rewriteGateway",processGateway),
+                     ("readOut",processReadOut),
                      ("constrained",processConstrained),("prueba",processPrueba)]
                      
  , optMode        = Nothing
@@ -205,7 +209,7 @@ molcasDriver getter opts molcasFile initialMol = do
       aMatrix       = initialAMTX initialMol
       project  = getter getProject
   mol <- interactWith job project initialMol
-  loggers <- mapM initLogger ["geometry.out", "result.out"]
+  loggers <- mapM initLogger ["geometry.out", "result.out","totalEnergy.out"]
   constantForceDynamics mol job thermo temp auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
   mapM_ logStop loggers
         
@@ -225,7 +229,7 @@ processMolcasTinker opts = do
       [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
       step          = 1
       job           = MolcasTinker molcasInput atomsQM molcasQM
-  loggers <- mapM initLogger ["geometry.out", "result.out"]
+  loggers <- mapM initLogger ["geometry.out", "result.out","totalEnergy.out"]
   mol <- interactWith job project initialMol
   driverMolcasTinker mol audt auTime temp thermo job project step loggers
   mapM_ logStop loggers 
@@ -235,7 +239,7 @@ driverMolcasTinker mol t dt temp thermo job project step loggers =
   if t <0 then return ()
           else do 
             let es = concatMap (printf "%.6f  ") $ mol ^. getEnergy . to head
-            zipWithM_ ($) [printMol mol es, printData mol step] loggers
+            zipWithM_ ($) [printMol mol es, printData mol step, printTotalEnergy mol] loggers
             (newMol,newThermo) <- dynamicNoseHoover mol dt temp thermo job project
             driverMolcasTinker newMol (t-dt) dt temp newThermo job project (succ step) loggers
             
@@ -288,7 +292,7 @@ driverGaussian getter opts mol = do
       job           = Gaussian (theoryLevels,basis)
       project       = "TullyExternalForces"
   newMol  <- interactWith job project mol
-  loggers <- mapM initLogger ["geometry.out", "result.out"] 
+  loggers <- mapM initLogger ["geometry.out", "result.out","totalEnergy.out"]
   constantForceDynamics newMol job thermo temp auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
   mapM_ logStop loggers      
                                    
@@ -301,7 +305,7 @@ processVerlet getter opts job project mol = do
       aMatrix       = initialAMTX mol 
       step          = 1
   newMol  <- interactWith job project mol
-  loggers <- mapM initLogger ["geometry.out", "result.out"] 
+  loggers <- mapM initLogger ["geometry.out", "result.out","totalEnergy.out"] 
   driverVerlet newMol job auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
   mapM_ logStop loggers
 
@@ -310,7 +314,7 @@ driverVerlet mol job time dt anchor externalForce aMatrix step project loggers =
    if time < 0.0 then return ()
                  else do 
                   let es = concatMap (printf "%.6f  ") $ mol ^. getEnergy . to head
-                  zipWithM_ ($) [printMol mol es, printData mol step] loggers                                         
+                  zipWithM_ ($) [printMol mol es, printData mol step, printTotalEnergy mol] loggers                                         
                   newMol                <- velocityVerletForces mol dt job project anchor externalForce
                   (tullyMol,newAmatrix) <- tullyDriver dt aMatrix step newMol
                   printGnuplot newAmatrix tullyMol
@@ -324,7 +328,7 @@ constantForceDynamics mol job thermo temp time dt anchor externalForce aMatrix s
    if time < 0.0 then return ()
                  else do 
                   let es = concatMap (printf "%.6f  ") $ mol ^. getEnergy . to head
-                  zipWithM_ ($) [printMol mol es, printData mol step] loggers                                         
+                  zipWithM_ ($) [printMol mol es, printData mol step, printTotalEnergy mol] loggers
                   (newMol,newThermo)    <- dynamicExternalForces mol dt temp thermo job project anchor externalForce
                   (tullyMol,newAmatrix) <- tullyDriver dt aMatrix step newMol
                   printGnuplot newAmatrix tullyMol
@@ -384,7 +388,20 @@ processGateway opts =do
   let  numat       = length atomsQM
   molcasQM   <- parserInputMolcasQM molcasFile $ parserGatewayQM numat
   modifyMolcasInput molcasInput molcasQM project $ mol   
-   
+
+processReadOut :: Options -> IO ()
+processReadOut opts = do
+  let file@[xyz,out] =  optInput opts 
+      state          = S1
+  initialMol  <- initializeMolcasOntheFly xyz state 300
+  mols <- parserGeomVel out initialMol         
+  let energies = parMap rdeepseq calcTotalEnergy mols
+      kinetic  = parMap rdeepseq (\x -> calcEk (x ^. getVel) (x ^. getMass)) mols
+  let a1 = writeFile ("TotalEnergy" ++ show state) $ concatMap (printf "%.5f\n") energies
+      a2 = writeFile ("KineticEnergy" ++ show state) $ concatMap (printf "%.5f\n") kinetic
+  concurrently a1 a2
+  print "Done"
+  
 processConstrained :: Options -> IO ()
 processConstrained = undefined
 

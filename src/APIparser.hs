@@ -3,7 +3,7 @@
 module APIparser where
 
 import Control.Applicative
-import Control.Arrow ((&&&))
+import Control.Arrow ((&&&),(***))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
 import Control.Lens
@@ -83,7 +83,7 @@ interactWith job project mol =
                  let io1 = writeMolcasXYZ (project ++ ".xyz") mol
                      io2 = writeFile (project ++ ".input") $ concatMap show inputData
                  concurrently io1 io2 
-                 launchMolcas project
+                 launchMolcasLocal project
                  parseMolcas project ["Grad","Roots"] mol
                  
      MolcasTinker inputData atomsQM molcasQM ->  do 
@@ -500,14 +500,32 @@ parseQ !n = do
      
 -- =======================> ParseMolecules in XYZ format <=======================
 
-parseMoleculeXYZ :: MyParser st [(Label,[Double])]  
-parseMoleculeXYZ = do
+parserGeomVel :: FilePath -> Molecule -> IO [Molecule]
+parserGeomVel xyz mol = do
+  r <- parseFromFile (many1 $ parseMol mol parseAtomsVel ) xyz
+  case r of
+       Left msg -> error $  show msg
+       Right xs -> return xs
+
+
+parseMoleculeXYZ :: MyParser st (Label,[Double]) -> MyParser st [(Label,[Double])]  
+parseMoleculeXYZ parser = do
     numat <- intNumber 
     count 2 anyLine
-    geometry <- count numat parseAtoms
+    geometry <- count numat parser
     return $ geometry 
-    
 
+parseMol :: Molecule -> MyParser st (Label,[Double])  -> MyParser st Molecule
+parseMol mol parser = do
+    numat <- intNumber 
+    anyLine
+    es <- count 2 (spaces >> realNumber)
+    anyLine 
+    geometry <- count numat parser
+    let new = updatePosMom geometry mol 
+    return $ new & getEnergy .~ [es] 
+    
+    
 parseAtoms :: MyParser st (Label,[Double])   
 parseAtoms = do 
             spaces 
@@ -516,7 +534,13 @@ parseAtoms = do
             anyLine
             return $ (label,xs) 
            
-     
+parseAtomsVel :: MyParser st (Label,[Double])   
+parseAtomsVel = do 
+            spaces 
+            label <- many1 alphaNum
+            xs    <- count 6 (spaces >> realNumber)
+            anyLine
+            return $ (label,xs)      
             
 -- =========> Utilities <=================
 calcElectSt :: Molecule -> Int
@@ -538,6 +562,15 @@ parseUnboxed = VU.unfoldr step
                  Nothing       -> Nothing
                  Just (!k, !t) -> Just (k, C.tail t)         
         
+updatePosMom :: [(Label,[Double])] -> Molecule -> Molecule 
+updatePosMom as mol = mol & getCoord .~ repaCoord 
+                          & getVel   .~ velocities  
+                          
+  where repaCoord   = R.fromListUnboxed (Z :. dim) xs                         
+        velocities = R.fromListUnboxed (Z :. dim) vs 
+        dim        = 3 * length as
+        (xs,vs)    = concat *** concat $ unzip . fmap (splitAt 3 . snd ) $ as
+         
 -- =============================> <===============================
 printGnuplot :: MatrixCmplx -> Molecule -> IO ()
 printGnuplot matrix mol = do
