@@ -146,17 +146,9 @@ processPrueba opts =  do
   mol <- (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp 
   r <- getGradEnerFCHK fchk mol 
   print r
---   r <- parseGaussianCheckpoint fchk
---   case r of
---        Left msg -> print msg
---        Right xs -> putStrLn $ concatMap fun xs  
---  
---   where fun x = case x of
---                      RGauBlock label _int _ -> label ++ "\n"
---                      otherwise              -> ""
---   
+
   
--- =============> Drivers to run the molecular dynamics simulations in Molcas <==============
+- =============> Drivers to run the molecular dynamics simulations in Molcas <==============
 
 processMolcas :: Options -> IO ()
 processMolcas opts = do
@@ -305,7 +297,7 @@ processVerletGround opts = do
       project      = getter getProject
       job          = GroundState (theoryLevels,basis)
   mol <- (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp 
-  processVerlet getter opts job project mol
+  driverVerletGround getter opts job project mol
  
   
 driverGaussian :: (forall a. Getting a InitialDynamics a -> a) -> Options -> Molecule -> IO ()
@@ -327,6 +319,24 @@ driverGaussian getter opts mol = do
    
    
 -- ==================> General Drivers <=================================  
+
+driverVerletGround :: (forall a. Getting a InitialDynamics a -> a) -> Options -> Job ->  Project -> Molecule -> IO ()
+driverVerletGround getter opts job project mol = do
+  let numat         = mol ^. getAtoms . to length
+      [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
+      step          = 1
+  loggers <- mapM initLogger ["geometry.out", "result.out","totalEnergy.out"]
+  loop loggers job auTime audt step project mol
+              
+  where
+    loop logs job time dt step project molecule = 
+         if time < 0 then mapM_ logStop logs
+                     else do
+                        let es = concatMap (printf "%.6f  ") $ molecule ^. getEnergy . to head
+                        zipWithM_ ($) [printMol molecule es, printData molecule step, printTotalEnergy molecule] logs                                         
+                        newMol  <- velocityVerletForces molecule dt job project [] 0 
+                        loop logs job (time-dt) dt (succ step) project newMol
+  
   
 processVerlet :: (forall a. Getting a InitialDynamics a -> a) -> Options -> Job ->  Project -> Molecule -> IO ()
 processVerlet getter opts job project mol = do
