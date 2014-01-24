@@ -120,7 +120,6 @@ data GauBlock =
       IGauBlock Label Int [Integer]     -- A GauBlock containing one or more integer values
     | RGauBlock Label Int [Double]      -- A GauBlock containing one or more real values
     | TGauBlock String                  -- A GauBlock containing just unformatted text
-
     
 data GaussLog = GaussLog [EigenBLock] [[Double]] deriving Show
 

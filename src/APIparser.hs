@@ -108,11 +108,11 @@ interactWith job project mol =
                  updateMultiStates out mol
                  
      GroundState tupleTheory -> do
-                let [input,out,fchk] = DL.zipWith (++) (repeat project) [".com",".log",".fchk"]
+                let [input,out,chk,fchk] = DL.zipWith (++) (repeat project) [".com",".log",".chk",".fchk"]
                 writeGaussJob tupleTheory project mol 
                 launchJob $ "g09 " ++ input
-                launchJob $ "formchk " ++ fchk
-                getInfoFCHK ["Grad"] fchk mol                 
+                launchJob $ "formchk " ++ chk
+                getGradEnerFCHK fchk mol                 
 
                             
      Palmeiro conex dirs ->  launchPalmeiro conex dirs mol
@@ -391,13 +391,16 @@ tuples2List xs = fmap go xs
 
 -- ===========> Gaussian Interface <=========
 -- |take info from the formated check point
-getInfoFCHK :: [Label] -> FilePath -> Molecule -> IO Molecule      
-getInfoFCHK keywords file mol = do
+getGradEnerFCHK :: FilePath -> Molecule -> IO Molecule      
+getGradEnerFCHK file mol = do
+  let keywords = ["Grad","Energy"]
   pairs <- takeInfo keywords <=< parseGaussianCheckpoint $ file
-  let grad = (\ys -> R.fromListUnboxed (Z:. DL.length ys) ys) $ lookupLabel pairs "Grad"
+  let grad   = (\ys -> R.fromListUnboxed (Z:. DL.length ys) ys) $ lookupLabel pairs "Grad"
+      energy = lookupLabel pairs "Energy"
       forces = computeUnboxedS $ R.map (negate) grad
-  return $ set getForce forces mol
-
+  return $ mol & getForce  .~ forces 
+               & getEnergy .~ [energy]
+    
 -- | Monadic Lookup function base on keywords  
 takeInfo :: [Label] -> Either ParseError [GauBlock] -> IO [(Label,[Double])]
 takeInfo labels eitherInfo =

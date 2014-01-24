@@ -143,8 +143,17 @@ processPrueba opts =  do
       basis        = getter getBasis
       project      = getter getProject
       job          = GroundState (theoryLevels,basis)
---   mol <- (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp 
-  print initData 
+  mol <- (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp 
+  r <- getGradEnerFCHK fchk mol 
+  print r
+--   r <- parseGaussianCheckpoint fchk
+--   case r of
+--        Left msg -> print msg
+--        Right xs -> putStrLn $ concatMap fun xs  
+--  
+--   where fun x = case x of
+--                      RGauBlock label _int _ -> label ++ "\n"
+--                      otherwise              -> ""
 --   
   
 -- =============> Drivers to run the molecular dynamics simulations in Molcas <==============
