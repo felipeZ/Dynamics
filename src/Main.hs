@@ -55,7 +55,8 @@ defaultOptions    = Options
  { optDump        = False
  , optModules     = [("gaussTully",processGauss), ("molcasTully",processMolcas),                                           
                      ("verletGaussian",processVerletGaussian),("verletMolcas",processVerletMolcas), 
-                     ("verletMolcasVel",processVerletMolcasVel),("verletGround",processVerletGround),
+                     ("verletMolcasVel",processVerletMolcasVel),("verletGaussVel",processVerletGaussVel),
+                     ("verletGround",processVerletGround),
                      ("molcasVel",processMolcasVel),("gaussVel",processGaussVel),
                      ("molcasTinker",processMolcasTinker),("molcasZeroVel",processMolcasZeroVelocity),                     
                      ("palmeiro",processPalmeiro), ("rewriteGateway",processGateway),
@@ -266,6 +267,22 @@ processVerletGaussian opts = do
   mol <- (updateMultiStates out) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp    
   processVerlet getter opts job project mol
 
+  
+processVerletGaussVel :: Options -> IO ()
+processVerletGaussVel opts = do
+  let temp = fromMaybe 298 $ optTemperature opts
+      files@[input,fchk,out,velxyz] =  optInput opts
+  initData <- parseFileInput parseInput input
+  let getter  = (initData ^.)
+      project = "TullyExternalForces"
+      theoryLevels  = getter getTheory
+      basis         = getter getBasis
+      job           = Gaussian (theoryLevels,basis)
+  mol <- (updateMultiStates out) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp
+  vs  <- readInitialVel velxyz
+  processVerlet getter opts job project $ mol & getVel .~ vs
+
+  
 -- | on the fly molecular dynamics with applied external forces
 processGauss :: Options -> IO ()
 processGauss opts = do
