@@ -6,15 +6,16 @@
 module Main where
 
 
-import Data.List (zipWith3)
+import Data.List (transpose,zipWith3)
 import Data.Complex
 import Data.Maybe ( fromMaybe )
+import qualified Data.Vector.Unboxed as VU
 import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Parallel.Strategies (parMap,rdeepseq)
 import Control.Lens ((.~),(^.),(&),Getting(..),to)
-import Control.Monad ((<=<),liftM,zipWithM_)
+import Control.Monad ((<=<),liftM,zipWithM,zipWithM_)
 import Control.Monad.Trans.Either
 import System.Environment ( getArgs )
 import System.FilePath
@@ -58,7 +59,7 @@ defaultOptions    = Options
                      ("molcasVel",processMolcasVel),("gaussVel",processGaussVel),
                      ("molcasTinker",processMolcasTinker),("molcasZeroVel",processMolcasZeroVelocity),                     
                      ("palmeiro",processPalmeiro), ("rewriteGateway",processGateway),
-                     ("readOut",processReadOut),
+                     ("readOut",processReadOut),("calcInternal",processCalcInternals),
                      ("constrained",processConstrained),("prueba",processPrueba)]
                      
  , optMode        = Nothing
@@ -148,7 +149,7 @@ processPrueba opts =  do
   print r
 
   
-- =============> Drivers to run the molecular dynamics simulations in Molcas <==============
+-- =============> Drivers to run the molecular dynamics simulations in Molcas <==============
 
 processMolcas :: Options -> IO ()
 processMolcas opts = do
@@ -332,9 +333,9 @@ driverVerletGround getter opts job project mol = do
     loop logs job time dt step project molecule = 
          if time < 0 then mapM_ logStop logs
                      else do
-                        let es = concatMap (printf "%.6f  ") $ molecule ^. getEnergy . to head
-                        zipWithM_ ($) [printMol molecule es, printData molecule step, printTotalEnergy molecule] logs                                         
-                        newMol  <- velocityVerletForces molecule dt job project [] 0 
+                        newMol  <- velocityVerletForces molecule dt job project [] 0
+                        let es = concatMap (printf "%12.6f  ")  $ newMol ^. getEnergy . to head
+                        zipWithM_ ($) [printMol newMol es, printData newMol step, printTotalEnergy newMol] logs
                         loop logs job (time-dt) dt (succ step) project newMol
   
   
@@ -351,16 +352,16 @@ processVerlet getter opts job project mol = do
 
 driverVerlet ::  Molecule -> Job -> Time -> DT-> Anchor -> Double -> MatrixCmplx -> Int -> Project  -> [Logger] -> IO () 
 driverVerlet mol job time dt anchor externalForce aMatrix step project loggers = do
-   if time < 0.0 then return ()
-                 else do 
-                  let es = concatMap (printf "%.6f  ") $ mol ^. getEnergy . to head
-                  zipWithM_ ($) [printMol mol es, printData mol step, printTotalEnergy mol] loggers                                         
-                  newMol                <- velocityVerletForces mol dt job project anchor externalForce
-                  (tullyMol,newAmatrix) <- tullyDriver dt aMatrix step newMol
-                  printGnuplot newAmatrix tullyMol
-                  let [oldRoot,newRoot] = (^.getElecSt) `fmap` [newMol,tullyMol]
-                      newJob            =  if oldRoot == newRoot then job else updateNewJobInput job tullyMol
-                  driverVerlet tullyMol newJob (time-dt) dt anchor externalForce newAmatrix (succ step) project loggers
+   if time < 0 then return ()
+               else do 
+                let es = concatMap (printf "%.6f  ") $ mol ^. getEnergy . to head
+                zipWithM_ ($) [printMol mol es, printData mol step, printTotalEnergy mol] loggers                                         
+                newMol                <- velocityVerletForces mol dt job project anchor externalForce
+                (tullyMol,newAmatrix) <- tullyDriver dt aMatrix step newMol
+                printGnuplot newAmatrix tullyMol
+                let [oldRoot,newRoot] = (^.getElecSt) `fmap` [newMol,tullyMol]
+                    newJob            =  if oldRoot == newRoot then job else updateNewJobInput job tullyMol
+                driverVerlet tullyMol newJob (time-dt) dt anchor externalForce newAmatrix (succ step) project loggers
 
   
 constantForceDynamics ::  Molecule -> Job -> Thermo -> Temperature -> Time -> DT-> Anchor -> Double -> MatrixCmplx -> Int -> Project  -> [Logger] -> IO ()
@@ -441,10 +442,26 @@ processReadOut opts = do
       kinetic  = parMap rdeepseq (\x -> calcEk (x ^. getVel) (x ^. getMass)) mols
   let a1 = writeFile ("TotalEnergyS0") $ concatMap (printf "%.5f\n") totalS0
       a2 = writeFile ("TotalEnergyS1") $ concatMap (printf "%.5f\n") totalS1
-      a3 = writeFile ("TotalEnergy") $ concatMap (printf "%.5f\n")   total
-      a4 = writeFile ("KineticEnergy") $ concatMap (printf "%.5f\n") kinetic
-  parallelLaunch [a1,a2,a3,a4]
+      a3 = writeFile ("KineticEnergy") $ concatMap (printf "%.5f\n") kinetic
+  parallelLaunch [a1,a2,a3]
   print "Done"
+
+processCalcInternals :: Options -> IO ()
+processCalcInternals opts = do
+  let file@[fileConex,out] =  optInput opts
+      state                =  S1
+  conex      <- parserFileInternas fileConex
+  initialMol <- initializeMolcasOntheFly out state 300
+  mols       <- parserGeomVel out initialMol
+  let numat           = initialMol ^. getAtoms . to length
+      numberBonds     = pred numat
+      internals       = parMap rdeepseq (calcInternals conex) mols
+      funSlice        = VU.toList . VU.slice 0 numberBonds 
+      funPrint        = concatMap (printf "%12.6f\n")
+      fun             = transpose 
+      funWrite i ints = async . writeFile ("enlace_" ++ (show i) ++ ".out") . funPrint $ ints
+  ids <- zipWithM (funWrite) [1..] $ transpose . fmap funSlice $ internals
+  mapM_ wait ids
   
 processConstrained :: Options -> IO ()
 processConstrained = undefined

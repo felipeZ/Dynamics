@@ -480,6 +480,13 @@ gaussCoeff = undefined
                              
 -- ================> Parser Internal Coordinates <===============
 
+parserFileInternas :: FilePath -> IO Connections
+parserFileInternas name = do
+  r <- parseFromFile parseInternals name
+  case r of
+       Left err  -> error $ show err
+       Right xs  -> return xs
+
 parseInternals :: MyParser st (Connections)
 parseInternals = do
   bonds     <- parseSection 2
