@@ -644,8 +644,8 @@ writeGaussJob :: (TheoryLevel,Basis)  -> String -> Molecule -> IO ()
 writeGaussJob (theory,basis) project mol =  do
 --   name <- getLoginName   
   let l1 = addNewLines 1 $ "%chk=" ++ project 
-      l2 = addNewLines 1 "%mem=2000Mb"
-      l3 = addNewLines 1 "%nproc=2"
+      l2 = addNewLines 1 "%mem=4000Mb"
+      l3 = addNewLines 1 "%nproc=4"
 --       l4 = addNewLines 1 $ "%scr=/scratch/" ++ name ++ "/"
 --       l5 = addNewLines 1 $ "%rwf=/scratch/" ++ name ++ "/"
       l6 = addNewLines 1 $ "#p " ++ (show theory) ++ basis ++ "  force  iop(1/33=1) nosymm"

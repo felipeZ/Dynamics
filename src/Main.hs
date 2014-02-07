@@ -57,6 +57,7 @@ defaultOptions    = Options
                      ("verletGaussian",processVerletGaussian),("verletMolcas",processVerletMolcas), 
                      ("verletMolcasVel",processVerletMolcasVel),("verletGaussVel",processVerletGaussVel),
                      ("verletGround",processVerletGround),
+                     ("NVTMolcas",processNVTMolcas),
                      ("molcasVel",processMolcasVel),("gaussVel",processGaussVel),
                      ("molcasTinker",processMolcasTinker),("molcasZeroVel",processMolcasZeroVelocity),                     
                      ("palmeiro",processPalmeiro), ("rewriteGateway",processGateway),
@@ -161,6 +162,18 @@ processMolcas opts = do
   initialMol   <- initializeMolcasOntheFly xyz (getter getInitialState) temp
   molcasDriver getter opts molcasFile initialMol
   
+processNVTMolcas :: Options -> IO ()
+processNVTMolcas opts =do
+  let temp = fromMaybe 298 $ optTemperature opts
+      files@[xyz,molcasFile,input] =  optInput opts
+  initData    <- parseFileInput parseInput input
+  molcasInput <- parseMolcasInputFile molcasFile
+  let getter   = (initData ^.)      
+      project  = getter getProject
+      job      =  Molcas molcasInput
+  initialMol   <- initializeMolcasOntheFly xyz (getter getInitialState) temp
+  driverNVT getter opts job project temp initialMol
+       
 processVerletMolcas :: Options -> IO ()
 processVerletMolcas opts = do
   let temp = fromMaybe 298 $ optTemperature opts
@@ -355,7 +368,26 @@ driverVerletGround getter opts job project mol = do
                         zipWithM_ ($) [printMol newMol es, printData newMol step, printTotalEnergy newMol] logs
                         loop logs job (time-dt) dt (succ step) project newMol
   
+-- | Loop to run Molecular dynamics at constant temperature without using the Tully algorithm  neither external forces
+driverNVT :: (forall a. Getting a InitialDynamics a -> a) -> Options -> Job ->  Project -> Temperature -> Molecule -> IO ()
+driverNVT getter opts job project temp mol = do
+  let numat         = mol ^. getAtoms . to length
+      [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
+      step          = 1
+      bath     = initializeThermo numat temp      
+  loggers <- mapM initLogger ["geometry.out", "result.out","totalEnergy.out"]
+  loop loggers job auTime audt step project temp bath mol
   
+  where
+    loop logs job time dt step project temp bath molecule = 
+         if time < 0 then mapM_ logStop logs
+                     else do
+                        (newMol,newThermo) <- dynamicNoseHoover molecule dt temp bath job project  
+                        let es = concatMap (printf "%12.6f  ")  $ newMol ^. getEnergy . to head
+                        zipWithM_ ($) [printMol newMol es, printData newMol step, printTotalEnergy newMol] logs
+                        loop logs job (time-dt) dt (succ step) project temp newThermo newMol  
+  
+
 processVerlet :: (forall a. Getting a InitialDynamics a -> a) -> Options -> Job ->  Project -> Molecule -> IO ()
 processVerlet getter opts job project mol = do
   let numat         = mol ^. getAtoms . to length

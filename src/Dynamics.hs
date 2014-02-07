@@ -141,7 +141,7 @@ noseHoover2  mol dt t thermo = bath mol2 dt t thermo
   where mol2 = moveVel dt mol
 
 
-dynamicNoseHoover :: Molecule -> DT -> Temperature -> Thermo -> Job -> String -> IO (Molecule,Thermo)  
+dynamicNoseHoover :: Molecule -> DT -> Temperature -> Thermo -> Job -> Project -> IO (Molecule,Thermo)  
 dynamicNoseHoover !mol !dt !t thermo job project = do  
        let (step1,thermo1) = noseHoover1 mol dt t thermo      
        step2 <- interactWith job project step1
