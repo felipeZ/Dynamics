@@ -56,7 +56,6 @@ defaultOptions    = Options
  , optModules     = [("gaussTully",processGauss), ("molcasTully",processMolcas),                                           
                      ("verletGaussian",processVerletGaussian),("verletMolcas",processVerletMolcas), 
                      ("verletMolcasVel",processVerletMolcasVel),("verletGaussVel",processVerletGaussVel),
-                     ("verletGround",processVerletGround),
                      ("NVTMolcas",processNVTMolcas),
                      ("molcasVel",processMolcasVel),("gaussVel",processGaussVel),
                      ("molcasTinker",processMolcasTinker),("molcasZeroVel",processMolcasZeroVelocity),                     
@@ -137,18 +136,8 @@ printFiles opts@Options { optInput = files, optDataDir = datadir } = do
             
 -- =========================>  Test API <=====================          
 processPrueba :: Options -> IO ()
-processPrueba opts =  do
-  let temp = fromMaybe 298 $ optTemperature opts
-      files@[input,fchk,out] = optInput opts 
-  initData <- parseFileInput parseInput input
-  let getter  = (initData ^.)
-      theoryLevels = getter getTheory
-      basis        = getter getBasis
-      project      = getter getProject
-      job          = GroundState (theoryLevels,basis)
-  mol <- (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp 
-  r <- getGradEnerFCHK fchk mol 
-  print r
+processPrueba opts = undefined
+
 
   
 -- =============> Drivers to run the molecular dynamics simulations in Molcas <==============
@@ -277,7 +266,7 @@ processVerletGaussian opts = do
       theoryLevels  = getter getTheory
       basis         = getter getBasis
       job           = Gaussian (theoryLevels,basis)
-  mol <- (updateMultiStates out) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp    
+  mol <- (updateMultiStates out fchk) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp    
   processVerlet getter opts job project mol
 
   
@@ -287,11 +276,11 @@ processVerletGaussVel opts = do
       files@[input,fchk,out,velxyz] =  optInput opts
   initData <- parseFileInput parseInput input
   let getter  = (initData ^.)
-      project = "TullyExternalForces"
+      project = getter getProject
       theoryLevels  = getter getTheory
       basis         = getter getBasis
       job           = Gaussian (theoryLevels,basis)
-  mol <- (updateMultiStates out) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp
+  mol <- (updateMultiStates out fchk) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp
   vs  <- readInitialVel velxyz
   processVerlet getter opts job project $ mol & getVel .~ vs
 
@@ -303,7 +292,7 @@ processGauss opts = do
       [input,fchk,out] = optInput opts 
   initData <- parseFileInput parseInput input
   let getter = (initData ^.)
-  mol <- (updateMultiStates out) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp
+  mol <- (updateMultiStates out fchk) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp
   driverGaussian getter opts mol  
 
 -- | user supplied initial velocities are used
@@ -313,22 +302,9 @@ processGaussVel opts = do
       [input,fchk,out,velxyz] = optInput opts 
   initData   <- parseFileInput parseInput input
   let getter = (initData ^.)
-  mol        <- (updateMultiStates out) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp
+  mol        <- (updateMultiStates out fchk) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp
   vs         <- readInitialVel velxyz
   driverGaussian getter opts $ mol & getVel .~ vs   
-
-processVerletGround :: Options -> IO ()
-processVerletGround opts = do
-  let temp = fromMaybe 298 $ optTemperature opts
-      files@[input,fchk,out] = optInput opts 
-  initData <- parseFileInput parseInput input
-  let getter  = (initData ^.)
-      theoryLevels = getter getTheory
-      basis        = getter getBasis
-      project      = getter getProject
-      job          = GroundState (theoryLevels,basis)
-  mol <- (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp 
-  driverVerletGround getter opts job project mol
  
   
 driverGaussian :: (forall a. Getting a InitialDynamics a -> a) -> Options -> Molecule -> IO ()

@@ -26,7 +26,8 @@ data Triplet = T1 | T2 | T3 | T4 | T5 deriving (Show,Enum,Eq,Read)
 data TheoryLevel = CASSCF (Int,Int) Int String  | HF | Unspecified   -- (number Electrons, Orbital) relaxRoot further commands
 
 instance Show TheoryLevel where
-    show (CASSCF (electrons,orbitals) rlxroot s) = "CASSCF" ++ "(" ++ show electrons ++ "," ++ show orbitals ++ ",NRoot=" ++ show rlxroot ++ s ++ ")" 
+    show (CASSCF (electrons,orbitals) rlxroot s) = let rest = if rlxroot == 1 then "" else s 
+                                                   in "CASSCF" ++ "(" ++ show electrons ++ "," ++ show orbitals ++ ",NRoot=" ++ show rlxroot ++ rest ++ ")" 
     show HF                                      = "HF"
     show Unspecified                             = "Unspecified"
  
@@ -100,7 +101,7 @@ data AtomXYZ = Atom Label XYZ VelocityXYZ deriving Show
 
 -- Jobs types
 data Job = Gaussian (TheoryLevel,Basis) | Interpolation | Molcas [MolcasInput String] | MolcasTinker [MolcasInput String] [(Label,Int)] [AtomQM]
-           |GroundState (TheoryLevel,Basis)  | Palmeiro Connections [FilePath]|Quadratic | HaskellAbInitio deriving Show 
+           | Palmeiro Connections [FilePath]|Quadratic | HaskellAbInitio deriving Show 
           
                                        
 -- ==================> Internal Coordinates data types <============
@@ -121,7 +122,7 @@ data GauBlock =
     | RGauBlock Label Int [Double]      -- A GauBlock containing one or more real values
     | TGauBlock String                  -- A GauBlock containing just unformatted text
     
-data GaussLog = GaussLog [EigenBLock] [[Double]] deriving Show
+data GaussLog = GaussLog [EigenBLock] [Double] deriving Show
 
                                        
 -- ==========> Molcas and Gaussian parser Types <=========                                      

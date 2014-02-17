@@ -100,19 +100,11 @@ interactWith job project mol =
                                                                       
                  
      Gaussian tupleTheory -> do 
-                 let input  = project ++ ".com"
-                     out    = project ++ ".log"        
+                 let [input,out,chk,fchk] = DL.zipWith (++) (repeat project) [".com",".log",".chk",".fchk"]
                  writeGaussJob tupleTheory project mol 
                  launchJob $ "g09 " ++ input
-                 print "Updating Roots info"
-                 updateMultiStates out mol
-                 
-     GroundState tupleTheory -> do
-                let [input,out,chk,fchk] = DL.zipWith (++) (repeat project) [".com",".log",".chk",".fchk"]
-                writeGaussJob tupleTheory project mol 
-                launchJob $ "g09 " ++ input
-                launchJob $ "formchk " ++ chk
-                getGradEnerFCHK fchk mol                 
+                 launchJob $ "formchk " ++ chk
+                 updateMultiStates out fchk mol               
 
                             
      Palmeiro conex dirs ->  launchPalmeiro conex dirs mol
@@ -172,9 +164,16 @@ updateCoeffEnergies energies coeff mol =
 updateNewJobInput :: Job -> Molecule -> Job
 updateNewJobInput job mol = case job of
                                  Molcas   theory -> updateMolcasInput theory rlxroot
+                                 Gaussian tupla  -> updateGaussInput tupla rlxroot
                                  otherwise       -> job               
                                                               
   where rlxroot = succ $ calcElectSt mol                                                              
+
+updateGaussInput :: (TheoryLevel,Basis) -> Int -> Job
+updateGaussInput (theory,basis) newrlx = Gaussian (fun,basis)
+  where fun = case theory of
+                   CASSCF activeSpace rlxroot s -> CASSCF activeSpace newrlx s 
+                   otherwise                    -> theory 
 
 updateMolcasInput ::  [MolcasInput String] -> Int -> Job
 updateMolcasInput xs rlxroot = Molcas $ fmap modifyInputRas xs
@@ -409,20 +408,20 @@ takeInfo labels eitherInfo =
        Right xs -> return . naturalTransf $ parseDataGaussian xs labels
 
                                      
-updateMultiStates :: FilePath -> Molecule -> IO Molecule
-updateMultiStates file mol = do
-  r <- parseLogGaussian numat file
-  case r of
-       Left msg -> error . show $ msg
-       Right (GaussLog xs gs) -> return $ updateGrads gs . updateCASSCF xs $ mol
-       
+updateMultiStates :: FilePath -> FilePath -> Molecule -> IO Molecule
+updateMultiStates out fchk mol = do
+  let st = mol ^. getElecSt        
+  (GaussLog xs g) <- parserLogFile numat out $ st
+  let newMol = updateGrads g . updateCASSCF xs $ mol
+  case st of
+       Left S0   -> getGradEnerFCHK fchk newMol
+       otherwise -> return newMol 
+              
   where numat = mol ^. getAtoms . to length
         sh = mol ^. getForce . to extent
         negateRepa = computeUnboxedS . R.map (negate) 
-        updateGrads gs mol = let grads = fmap (negateRepa . fromListUnboxed sh) gs
-                                 st = calcElectSt mol
-                                 g = grads !! st
-                             in set getForce g mol    
+        updateGrads g mol = let grad = negateRepa . fromListUnboxed sh $ g
+                            in mol & getForce .~ grad    
                                                               
 updateCASSCF :: [EigenBLock] -> Molecule ->  Molecule
 updateCASSCF xs mol =
