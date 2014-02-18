@@ -410,12 +410,12 @@ takeInfo labels eitherInfo =
                                      
 updateMultiStates :: FilePath -> FilePath -> Molecule -> IO Molecule
 updateMultiStates out fchk mol = do
-  let st = mol ^. getElecSt        
+  let st          = mol ^. getElecSt        
   (GaussLog xs g) <- parserLogFile numat out $ st
-  let newMol = updateGrads g . updateCASSCF xs $ mol
+  let casMol      = updateCASSCF xs $ mol
   case st of
-       Left S0   -> getGradEnerFCHK fchk newMol
-       otherwise -> return newMol 
+       Left S0   -> getGradEnerFCHK fchk $ casMol 
+       otherwise -> return . updateGrads g $ casMol
               
   where numat = mol ^. getAtoms . to length
         sh = mol ^. getForce . to extent

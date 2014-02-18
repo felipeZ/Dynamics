@@ -136,7 +136,19 @@ printFiles opts@Options { optInput = files, optDataDir = datadir } = do
             
 -- =========================>  Test API <=====================          
 processPrueba :: Options -> IO ()
-processPrueba opts = undefined
+processPrueba opts =do
+  let temp = fromMaybe 298 $ optTemperature opts
+      [input,fchk,out] = optInput opts 
+  initData <- parseFileInput parseInput input
+  let getter  = (initData ^.)
+      project = "TullyExternalForces"
+      theoryLevels  = getter getTheory
+      basis         = getter getBasis
+      job           = Gaussian (theoryLevels,basis)
+  mol <- (updateMultiStates out fchk) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp    
+  r <- updateMultiStates out fchk mol               
+  print r
+  print "Successful operation"
 
 
   
