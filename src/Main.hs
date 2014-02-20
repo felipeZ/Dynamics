@@ -158,11 +158,26 @@ processMolcas :: Options -> IO ()
 processMolcas opts = do
   let temp = fromMaybe 298 $ optTemperature opts
       files@[xyz,molcasFile,input] =  optInput opts
-  initData <- parseFileInput parseInput input
-  let getter   = (initData ^.)      
-  initialMol   <- initializeMolcasOntheFly xyz (getter getInitialState) temp
-  molcasDriver getter opts molcasFile initialMol
+  initData    <- parseFileInput parseInput input
+  molcasInput <- parseMolcasInputFile molcasFile
+  let getter  = (initData ^.)      
+      job     = Molcas molcasInput
+  initialMol  <- initializeMolcasOntheFly xyz (getter getInitialState) temp
+  molcasDriver getter opts job initialMol
+ 
+-- | Molcas Tinker Interface         
+processMolcasTinker :: Options -> IO ()
+processMolcasTinker opts = do
+  let temp = fromMaybe 298 $ optTemperature opts
+      files@[tinkerKey,tinkerXYZ,molcasFile,input] =  optInput opts      
+      numat = undefined
+  initData              <- parseFileInput parseInput input 
+  let getter            = (initData ^.)
+  molcasInput           <- parseMolcasInputFile molcasFile
+  (initialMol,molcasQM) <- initializeMolcasTinker molcasFile (getter getInitialState) temp numat
+  molcasDriver getter opts (MolcasTinker molcasInput molcasQM) initialMol
   
+   
 processNVTMolcas :: Options -> IO ()
 processNVTMolcas opts =do
   let temp = fromMaybe 298 $ optTemperature opts
@@ -194,7 +209,7 @@ processVerletMolcasVel opts = do
   initData <- parseFileInput parseInput input
   let getter  = (initData ^.)
       project = getter getProject
-  mol         <- initializeMolcasOntheFly xyz (getter getInitialState) temp
+  mol        <- initializeMolcasOntheFly xyz (getter getInitialState) temp
   vs         <- readInitialVel velxyz
   molcasInput <- parseMolcasInputFile molcasFile
   let job     = Molcas molcasInput
@@ -205,30 +220,31 @@ processMolcasVel opts = do
   let temp = fromMaybe 298 $ optTemperature opts
       files@[xyz,velxyz,molcasFile,input] =  optInput opts
   initData <- parseFileInput parseInput input
+  molcasInput <- parseMolcasInputFile molcasFile
   let getter = (initData ^.)
+      job    = Molcas molcasInput
   mol        <- initializeMolcasOntheFly xyz (getter getInitialState) temp
   vs         <- readInitialVel velxyz
-  molcasDriver getter opts molcasFile $ mol & getVel .~ vs   
-
+  molcasDriver getter opts job $ mol & getVel .~ vs   
+  
 processMolcasZeroVelocity :: Options -> IO ()
 processMolcasZeroVelocity opts = do
   let temp = fromMaybe 298 $ optTemperature opts
       files@[xyz,molcasFile,input] =  optInput opts
   initData <- parseFileInput parseInput input
-  let getter   = (initData ^.)
-      project  = getter getProject
+  molcasInput <- parseMolcasInputFile molcasFile  
+  let getter  = (initData ^.)
+      job     = Molcas molcasInput 
   initialMol  <- initializeMolcasZeroVel xyz (getter getInitialState) temp
-  molcasDriver getter opts molcasFile initialMol
+  molcasDriver getter opts job initialMol
   
-molcasDriver :: (forall a. Getting a InitialDynamics a -> a) -> Options -> FilePath -> Molecule -> IO ()
-molcasDriver getter opts molcasFile initialMol = do 
+molcasDriver :: (forall a. Getting a InitialDynamics a -> a) -> Options -> Job -> Molecule -> IO ()
+molcasDriver getter opts job initialMol = do 
   let temp = fromMaybe 298 $ optTemperature opts
-  molcasInput  <- parseMolcasInputFile molcasFile
   let numat         = initialMol ^. getAtoms . to length
       [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
       thermo        = initializeThermo numat temp
-      step          = 1
-      job           = Molcas molcasInput
+      step          = 1     
       aMatrix       = initialAMTX initialMol
       project  = getter getProject
   mol <- interactWith job project initialMol
@@ -236,35 +252,6 @@ molcasDriver getter opts molcasFile initialMol = do
   constantForceDynamics mol job thermo temp auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
   mapM_ logStop loggers
         
--- | Molcas Tinker Interface         
-processMolcasTinker :: Options -> IO ()
-processMolcasTinker opts = do
-  let temp = fromMaybe 298 $ optTemperature opts
-      files@[tinkerKey,tinkerXYZ,molcasFile,input] =  optInput opts      
-  initData <- parseFileInput parseInput input
-  let getter  = (initData ^.)
-      project = getter getProject
-  atomsQM               <- parserKeyFile tinkerKey
-  molcasInput           <- parseMolcasInputFile molcasFile
-  (initialMol,molcasQM) <- initializeMolcasTinker molcasFile (getter getInitialState) temp $ length atomsQM
-  let numat         = initialMol ^. getAtoms . to length
-      thermo        = initializeThermo numat temp
-      [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
-      step          = 1
-      job           = MolcasTinker molcasInput atomsQM molcasQM
-  loggers <- mapM initLogger ["geometry.out", "result.out","totalEnergy.out"]
-  mol <- interactWith job project initialMol
-  driverMolcasTinker mol audt auTime temp thermo job project step loggers
-  mapM_ logStop loggers 
-
-driverMolcasTinker :: Molecule -> Time -> DT -> Temperature -> Thermo -> Job -> Project -> Step -> [Logger] -> IO ()  
-driverMolcasTinker mol t dt temp thermo job project step loggers = 
-  if t <0 then return ()
-          else do 
-            let es = concatMap (printf "%.6f  ") $ mol ^. getEnergy . to head
-            zipWithM_ ($) [printMol mol es, printData mol step, printTotalEnergy mol] loggers
-            (newMol,newThermo) <- dynamicNoseHoover mol dt temp thermo job project
-            driverMolcasTinker newMol (t-dt) dt temp newThermo job project (succ step) loggers
             
 -- =============> Functions to run the molecular dynamics simulations in Gaussian <==============
 
@@ -414,6 +401,8 @@ constantForceDynamics mol job thermo temp time dt anchor externalForce aMatrix s
                       newJob            =  if oldRoot == newRoot then job else updateNewJobInput job tullyMol
                   constantForceDynamics tullyMol newJob newThermo temp (time-dt) dt anchor externalForce newAmatrix (succ step) project loggers
 
+                  
+                  
 -- | Fewest Switches Tully Algorithm using Persico-Granucci Correction 
 tullyDriver ::  DT -> MatrixCmplx -> Int ->  Molecule -> IO (Molecule,MatrixCmplx)
 tullyDriver dt aMatrix step mol =

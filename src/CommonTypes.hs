@@ -100,7 +100,7 @@ data AtomXYZ = Atom Label XYZ VelocityXYZ deriving Show
  
 
 -- Jobs types
-data Job = Gaussian (TheoryLevel,Basis) | Interpolation | Molcas [MolcasInput String] | MolcasTinker [MolcasInput String] [(Label,Int)] [AtomQM]
+data Job = Gaussian (TheoryLevel,Basis) | Interpolation | Molcas [MolcasInput String] | MolcasTinker [MolcasInput String] [AtomQM] {- MolcasTinker [MolcasInput String] [(Label,Int)] [AtomQM]-}
            | Palmeiro Connections [FilePath]|Quadratic | HaskellAbInitio deriving Show 
           
                                        

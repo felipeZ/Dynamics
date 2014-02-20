@@ -37,7 +37,6 @@ import Molcas
 import ParsecNumbers
 import ParsecText
 import QuadraticInterpolation
-import TinkerQMMM
 -- =======================> Data, Types and Instances <==========================
 
 newtype ParseInfo a = ParseInfo {
@@ -79,25 +78,21 @@ naturalTransf (ParseInfo xs) = catMaybes xs
 interactWith :: Job -> String -> Molecule -> IO Molecule
 interactWith job project mol = 
   case job of 
-     Molcas inputData -> do
-                 let io1 = writeMolcasXYZ (project ++ ".xyz") mol
-                     io2 = writeFile (project ++ ".input") $ concatMap show inputData
-                 concurrently io1 io2 
-                 launchMolcasLocal project
-                 parseMolcas project ["Grad","Roots"] mol
-                 
-     MolcasTinker inputData atomsQM molcasQM ->  do 
-                 print "Update QM atoms"
-                 reWriteXYZtinker mol atomsQM project
-                 print "Launching tinker"
-                 launchTinker project
+     Molcas inputData -> do 
+                       let io1 = writeMolcasXYZ (project ++ ".xyz") mol
+                           io2 = writeFile (project ++ ".input") $ concatMap show inputData
+                       concurrently io1 io2 
+                       launchMolcasLocal project
+                       parseMolcas project ["Grad","Roots"] mol                                 
+                                  
+     MolcasTinker inputData molcasQM ->  do 
                  print "rewrite Molcas input"
                  modifyMolcasInput inputData molcasQM project mol
                  print "launch Molcas"
-                 launchMolcas project
+                 launchMolcasLocal project
                  print "Parsing Molcas output"
-                 parseMolcas project ["GradESPF"] mol
-                                                                      
+                 parseMolcas project ["GradESPF","Roots"] mol
+                 
                  
      Gaussian tupleTheory -> do 
                  let [input,out,chk,fchk] = DL.zipWith (++) (repeat project) [".com",".log",".chk",".fchk"]
@@ -105,13 +100,12 @@ interactWith job project mol =
                  launchJob $ "g09 " ++ input
                  launchJob $ "formchk " ++ chk
                  updateMultiStates out fchk mol               
-
                             
      Palmeiro conex dirs ->  launchPalmeiro conex dirs mol
-       
-                             
+                                  
      Quadratic -> return $ calcgradQuadratic mol
-
+     
+     
 -- Command to summit jobs in the Resmol cluster     
 launchCluster :: Command -> Args -> IO ()
 launchCluster cmd name = do
