@@ -169,12 +169,12 @@ processMolcas opts = do
 processMolcasTinker :: Options -> IO ()
 processMolcasTinker opts = do
   let temp = fromMaybe 298 $ optTemperature opts
-      files@[tinkerKey,tinkerXYZ,molcasFile,input] =  optInput opts      
-      numat = undefined
+      files@[tinkerKey,molcasFile,input] =  optInput opts      
+  atomsQM               <- parserKeyFile tinkerKey
   initData              <- parseFileInput parseInput input 
   let getter            = (initData ^.)
   molcasInput           <- parseMolcasInputFile molcasFile
-  (initialMol,molcasQM) <- initializeMolcasTinker molcasFile (getter getInitialState) temp numat
+  (initialMol,molcasQM) <- initializeMolcasTinker molcasFile (getter getInitialState) temp $ length atomsQM
   molcasDriver getter opts (MolcasTinker molcasInput molcasQM) initialMol
   
    
