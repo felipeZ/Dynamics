@@ -228,16 +228,13 @@ getSuffixFile path suff = do
 
 launchMolcas :: Project -> Job ->  IO ()
 launchMolcas project job =do
-  r <- system "qs" -- Am I in a cluster ? (really ugly hack!!!)
+  r <- system "qstat > /dev/null" -- Am I in a cluster ? (really ugly hack!!!)
   case r of
        ExitFailure _ -> launchMolcasLocal project -- not I am not
        ExitSuccess   -> case job of  -- I am in a cluster!!
-                             MolcasTinker _arg1 _arg2 -> writeShellPBS >> launchCluster "qsub" $ project ++ ".sh"
+                             MolcasTinker _arg1 _arg2 -> writeShellPBS project >> launchCluster "qsub" (project ++ ".sh")
                              Molcas  _arg1            -> launchCluster "Molcas" $ project ++ ".input" 
        
-       
-  
-
 launchMolcasLocal :: Project ->  IO ()
 launchMolcasLocal project = do
    let input = project ++ ".input"
