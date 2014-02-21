@@ -28,6 +28,7 @@ import Text.Printf (printf)
 
 
 -- Internal modules
+import ClusterAPI
 import CommonTypes
 import Constants
 import Gaussian 
@@ -82,14 +83,14 @@ interactWith job project mol =
                        let io1 = writeMolcasXYZ (project ++ ".xyz") mol
                            io2 = writeFile (project ++ ".input") $ concatMap show inputData
                        concurrently io1 io2 
-                       launchMolcasLocal project
+                       launchMolcas project job
                        parseMolcas project ["Grad","Roots"] mol                                 
                                   
      MolcasTinker inputData molcasQM ->  do 
                  print "rewrite Molcas input"
                  modifyMolcasInput inputData molcasQM project mol
                  print "launch Molcas"
-                 launchMolcasLocal project
+                 launchMolcas project job
                  print "Parsing Molcas output"
                  parseMolcas project ["GradESPF","Roots"] mol
                  
@@ -106,25 +107,6 @@ interactWith job project mol =
      Quadratic -> return $ calcgradQuadratic mol
      
      
--- Command to summit jobs in the Resmol cluster     
-launchCluster :: Command -> Args -> IO ()
-launchCluster cmd name = do
-  [pid] <- lines `fmap` readProcess cmd [name] ""
-  simpleLoop pid 10 not    -- has the calculation started?
-  simpleLoop pid 20 id -- has the calculation finished?
-  
-  
---Command to summit jobs in the nodes of a cluster 
--- launchNode :: Command -> Args -> IO ()
--- launchNode cmd name = do
---  
--- | check the cluster queue each t seconds
-simpleLoop :: String  -> Int -> (Bool -> Bool) -> IO ()
-simpleLoop pid t fun = do
-  jobsId <- (concatMap words . lines) <$>  readProcess "qstat" ["-r"] ""
-  if (fun $ DL.elem pid jobsId)
-        then threadDelay (10^6*t) >> simpleLoop pid t fun -- Haskell use miliseconds
-        else return ()
 
 -- | local jobs  
 launchJob :: String -> IO ()
@@ -244,8 +226,17 @@ getSuffixFile path suff = do
   
 -- =======================> Molcas <============
 
-launchMolcas :: Project ->  IO ()
-launchMolcas project = launchCluster "Molcas" $ project ++ ".input"
+launchMolcas :: Project -> Job ->  IO ()
+launchMolcas project job =do
+  r <- system "qs" -- Am I in a cluster ? (really ugly hack!!!)
+  case r of
+       ExitFailure _ -> launchMolcasLocal project -- not I am not
+       ExitSuccess   -> case job of  -- I am in a cluster!!
+                             MolcasTinker _arg1 _arg2 -> writeShellPBS >> launchCluster "qsub" $ project ++ ".sh"
+                             Molcas  _arg1            -> launchCluster "Molcas" $ project ++ ".input" 
+       
+       
+  
 
 launchMolcasLocal :: Project ->  IO ()
 launchMolcasLocal project = do

@@ -76,6 +76,6 @@ executable HsDynamics
 
   hs-source-dirs:      src
   main-is: Main.hs
-  other-modules: CommonTypes Constants Dynamics InitialConditions InternalCoordinates Molcas MolcasShow OptsCheck Paths_HsDynamics  ParsecNumbers ParsecText  Tasks Tully
+  other-modules: ClusterAPI CommonTypes Constants Dynamics InitialConditions InternalCoordinates Logger Molcas MolcasShow OptsCheck Paths_HsDynamics  ParsecNumbers ParsecText  Tasks Tully
 
  
