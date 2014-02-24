@@ -42,36 +42,31 @@ writeShellPBS :: Project ->  IO ()
 writeShellPBS project = do
   hd   <- getCurrentDirectory
   name <- getLoginName
-  let   file    = project ++ ".sh"
-        p1      = concatMap (++"\n") [x1,x2,x3,x4,x5,x6,x7,x8]
-        p2      = concatMap (++"\n") [x10,x11,x12]
-        p3      = concatMap (++"\n") [x13,x14,x15,x16,x17,x18,x19]
-        proj    = "export Project= " ++ project ++ "\n"
-        home    = "HomeDir=" ++ hd ++ "\n"
-        cd      = "cd /scratch/" ++ name ++ "\n"
-        mkdir   = "mkdir " ++ project ++ ".$rand" ++ "\n"
-        tempDir = "TempDir=/scratch/" ++ name ++ "/" ++ project ++ ".$rand/" ++ "\n"
-        
+  let   file    = project ++ ".sh"        
         x1  =  "#!/bin/bash -l"
-        x2  =  "#PBS -N mdS1_prot"
+        x2  =  "#PBS -N " ++ project
         x3  =  "#PBS -S /bin/sh"
         x4  =  "#PBS -r n"
         x5  =  "#PBS -l nodes=1:ppn=4"
         x6  =  "#PBS -l mem=8000MB"
         x7  =  "rand=$(basename $PBS_JOBID .master)"
         x8  =  "source /apps/intel/composer_xe_2011_sp1.9.293/bin/compilervars.sh intel64"
-        
+        x9  =  "export Project=" ++ project
         x10 =  "export MOLCAS=/apps/Chem/molcas7.9"
         x11 =  "export MOLCASMEM=8000MB"
-        x12 =  "export TINKER=/apps/Chem/molcas7.9/tinker/bin/"              
-        x13 =  "export WorkDir=$TempDir"
-        x14 =  "export InpDir=$HomeDir"
-        x15 =  "cp $HomeDir/* $WorkDir/"
-        x16 =  "cd $WorkDir"
-        x17 =  "ln -sf /apps/bin/molcas molcas"
-        x18 =   "./molcas $WorkDir/$Project.input >$InpDir/$Project.out 2>$InpDir/$Project.err"
-        x19 =   "wait"
-  writeFile file $  p1 ++ proj ++ p2++ home ++ cd ++ mkdir ++ tempDir ++ p3
+        x12 =  "export TINKER=/apps/Chem/molcas7.9/tinker/bin/" 
+        x13 =  "HomeDir=" ++ hd 
+        x14 =  "cd /scratch/" ++ name 
+        x15 =  "mkdir " ++ project ++ ".$rand" 
+        x16 =  "TempDir=/scratch/" ++ name ++ "/" ++ project ++ ".$rand/" 
+        x17 =  "export WorkDir=$TempDir"
+        x18 =  "export InpDir=$HomeDir"
+        x19 =  "cp $HomeDir/* $WorkDir/"
+        x20 =  "cd $WorkDir"
+        x21 =  "ln -sf /apps/bin/molcas molcas"
+        x22 =   "./molcas $WorkDir/$Project.input >$InpDir/$Project.out 2>$InpDir/$Project.err"
+        x23 =   "wait"        
+  writeFile file $ concatMap (++"\n") [x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15,x16,x17,x18,x19,x20,x21,x22,x23] 
   p <- getPermissions file
   setPermissions file (p {executable = True})
 

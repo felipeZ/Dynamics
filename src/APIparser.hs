@@ -257,7 +257,8 @@ writeGateway atoms mol = Gateway $ concat $ DL.zipWith3 fun xs atoms [1..]
 
   where xs        = fmap printxyz $ chunksOf 3 qs
         printxyz [x,y,z] = printf "%12.5f  %.5f  %.5f" x y z
-        qs        = mol ^. getCoord . to R.toList
+        rs        = mol ^. getCoord . to (R.computeUnboxedS . R.map (*a0) ) -- get the Cartesian coordinates and transform then to Amstrong
+        qs        = R.toList rs
         symbols   = mol ^. getAtoms
         between x = " Basis set\n" ++ x ++ " End of Basis\n"
         spaces    = (" "++)
@@ -518,7 +519,7 @@ parseMol :: Molecule -> MyParser st (Label,[Double])  -> MyParser st Molecule
 parseMol mol parser = do
     numat <- intNumber 
     anyLine
-    es <- count 2 (spaces >> realNumber)
+    es <- many1 $ try (spaces >> realNumber)
     anyLine 
     geometry <- count numat parser
     let new = updatePosMom geometry mol 
