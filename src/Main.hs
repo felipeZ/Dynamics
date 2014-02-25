@@ -23,7 +23,7 @@ import System.Cmd ( system )
 import System.Console.GetOpt
 import Text.Printf
 
-
+import Control.Exception (Exception(..),catch)
 -- Cabal imports
 import Data.Version (showVersion)
 import Distribution.Version
@@ -136,19 +136,15 @@ printFiles opts@Options { optInput = files, optDataDir = datadir } = do
             
 -- =========================>  Test API <=====================          
 processPrueba :: Options -> IO ()
-processPrueba opts =do
+processPrueba opts = do
   let temp = fromMaybe 298 $ optTemperature opts
-      [input,fchk,out] = optInput opts 
-  initData <- parseFileInput parseInput input
-  let getter  = (initData ^.)
-      project = "TullyExternalForces"
-      theoryLevels  = getter getTheory
-      basis         = getter getBasis
-      job           = Gaussian (theoryLevels,basis)
-  mol <- (updateMultiStates out fchk) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp    
-  r <- updateMultiStates out fchk mol               
-  print r
-  print "Successful operation"
+      files@[tinkerKey,molcasFile,input] =  optInput opts      
+  atomsQM               <- parserKeyFile tinkerKey
+  initData              <- parseFileInput parseInput input 
+  let getter            = (initData ^.)
+  molcasInput           <- parseMolcasInputFile molcasFile
+  (initialMol,molcasQM) <- initializeMolcasTinker molcasFile (getter getInitialState) temp $ length atomsQM
+  molcasDriver getter opts (MolcasTinker molcasInput molcasQM) initialMol
 
 
   
@@ -252,7 +248,7 @@ molcasDriver getter opts job initialMol = do
   constantForceDynamics mol job thermo temp auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
   mapM_ logStop loggers
         
-            
+
 -- =============> Functions to run the molecular dynamics simulations in Gaussian <==============
 
 processVerletGaussian :: Options -> IO ()
@@ -303,8 +299,7 @@ processGaussVel opts = do
   let getter = (initData ^.)
   mol        <- (updateMultiStates out fchk) <=< (initializeSystemOnTheFly fchk $ getter getInitialState) $ temp
   vs         <- readInitialVel velxyz
-  driverGaussian getter opts $ mol & getVel .~ vs   
- 
+  driverGaussian getter opts $ mol & getVel .~ vs    
   
 driverGaussian :: (forall a. Getting a InitialDynamics a -> a) -> Options -> Molecule -> IO ()
 driverGaussian getter opts mol = do
@@ -322,8 +317,7 @@ driverGaussian getter opts mol = do
   loggers <- mapM initLogger ["geometry.out", "result.out","totalEnergy.out"]
   constantForceDynamics newMol job thermo temp auTime audt (getter getForceAnchor) (getter getExtForceMod) aMatrix step project loggers
   mapM_ logStop loggers      
-   
-   
+      
 -- ==================> General Drivers <=================================  
 
 driverVerletGround :: (forall a. Getting a InitialDynamics a -> a) -> Options -> Job ->  Project -> Molecule -> IO ()

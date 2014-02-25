@@ -6,6 +6,7 @@ import Control.Applicative
 import Control.Arrow ((&&&),(***))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
+import Control.Exception (SomeException,catch)
 import Control.Lens
 import Control.Monad 
 import Data.Array.Repa as R hiding ((++))
@@ -26,7 +27,7 @@ import Text.Parsec
 import Text.Parsec.ByteString (parseFromFile)
 import Text.Printf (printf)
 
-
+import Prelude hiding (catch)
 -- Internal modules
 import ClusterAPI
 import CommonTypes
@@ -156,17 +157,7 @@ updateMolcasInput xs rlxroot = Molcas $ fmap modifyInputRas xs
  where modifyInputRas x = case x of
                                (RasSCF _ h t) -> RasSCF rlxroot h t
                                otherwise      -> x
-                
--- =======================> Tinker <===========                                                
-launchTinker :: String -> IO ()
-launchTinker project = do
-   let root   ="/home/marco/7.8.dev/tinker-5.1.09/source/dynaqmmm.x  "
-       name   = project ++ ".xyz"                    -- first argument : .xyz file
-       suffix = "  10  0.1 0.01 298 0.734 0.723 > /dev/null 2>&1"  -- argument : -> step (1) -> dt (default 1) -> dump (default 0.1) -> temperature (298 K)
-                                                                   -- -> scaling factor first HLA  -> scaling factor second HLA
-       job = root ++ name ++ suffix
-   launchJob job
-        
+                        
         
 -- ======================> Palmeiro <==============
 launchPalmeiro :: Connections -> [FilePath] -> Molecule -> IO Molecule
@@ -226,6 +217,7 @@ getSuffixFile path suff = do
   
 -- =======================> Molcas <============
 
+-- How to launch molcas Locally or in a cluster
 launchMolcas :: Project -> Job ->  IO ()
 launchMolcas project job =do
   r <- system "qstat > /dev/null" -- Am I in a cluster ? (really ugly hack!!!)
@@ -242,7 +234,17 @@ launchMolcasLocal project = do
        err   = project ++ ".err"
    launchJob $ "molcas  " ++ input ++ ">  " ++ out ++ " 2>  " ++ err 
 
+-- If there is an initial output of Molcas do not repeat it, simply parse it   
+firsStepMolcas :: Job -> String -> Molecule -> IO Molecule
+firsStepMolcas job project mol = catch action1 ((\_ -> action2) :: SomeException -> IO Molecule)
+  
+  where action1  = case job of
+                        Molcas _         -> parseMolcas project ["Grad","Roots"] mol
+                        MolcasTinker _ _ -> parseMolcas project ["GradESPF","Roots"] mol
+        action2 = interactWith job project mol   
+        
 
+-- Molcas/tinker interface requires to rewrite the input in every step of the dynamics        
 modifyMolcasInput :: [MolcasInput String] -> [AtomQM] -> Project -> Molecule -> IO ()
 modifyMolcasInput inputData molcasQM project mol = do
        let newInput = fmap fun inputData
