@@ -77,8 +77,8 @@ naturalTransf (ParseInfo xs) = catMaybes xs
 
 -- =================> Call External Programs <==================
 
-interactWith :: Job -> String -> Molecule -> IO Molecule
-interactWith job project mol = 
+interactWith :: Job -> String -> Int -> Molecule -> IO Molecule
+interactWith job project step mol = 
   case job of 
      Molcas inputData -> do 
                        let io1 = writeMolcasXYZ (project ++ ".xyz") mol
@@ -90,6 +90,8 @@ interactWith job project mol =
      MolcasTinker inputData molcasQM ->  do 
                  print "rewrite Molcas input"
                  modifyMolcasInput inputData molcasQM project mol
+                 print "save tinker xyz "
+                 saveTinkerXYZ project step
                  print "launch Molcas"
                  launchMolcas project job
                  print "Parsing Molcas output"
@@ -235,15 +237,21 @@ launchMolcasLocal project = do
    launchJob $ "molcas  " ++ input ++ ">  " ++ out ++ " 2>  " ++ err 
 
 -- If there is an initial output of Molcas do not repeat it, simply parse it   
-firsStepMolcas :: Job -> String -> Molecule -> IO Molecule
-firsStepMolcas job project mol = catch action1 ((\_ -> action2) :: SomeException -> IO Molecule)
+firsStepMolcas :: Job -> String -> Int -> Molecule -> IO Molecule
+firsStepMolcas job project step mol = catch action1 ((\_ -> action2) :: SomeException -> IO Molecule)
   
   where action1  = case job of
                         Molcas _         -> parseMolcas project ["Grad","Roots"] mol
                         MolcasTinker _ _ -> parseMolcas project ["GradESPF","Roots"] mol
-        action2 = interactWith job project mol   
+        action2 = interactWith job project step mol 
         
-
+saveTinkerXYZ :: Project -> Int -> IO ()
+saveTinkerXYZ project step = copyFile from to
+  where n    = show step
+        from = project ++ ".xyz"
+        out  = project ++ "_" ++ n ++ ".xyz"
+        to   = "TinkerGeometries/" ++ out 
+        
 -- Molcas/tinker interface requires to rewrite the input in every step of the dynamics        
 modifyMolcasInput :: [MolcasInput String] -> [AtomQM] -> Project -> Molecule -> IO ()
 modifyMolcasInput inputData molcasQM project mol = do
