@@ -454,17 +454,18 @@ processGateway opts =do
 
 processReadOut :: Options -> IO ()
 processReadOut opts = do
-  let file@[xyz,out] =  optInput opts 
+  let file@[out] =  optInput opts 
       state          = S1
-  initialMol  <- initializeMolcasOntheFly xyz state 300
+  initialMol  <- initializeMolcasOntheFly out state 300
   mols <- parserGeomVel out initialMol         
-  let totalS0 = parMap rdeepseq calcTotalEnergy $ (& getElecSt .~ Left S0) `fmap` mols
-      totalS1 = parMap rdeepseq calcTotalEnergy $ (& getElecSt .~ Left S1) `fmap` mols
-      total   = parMap rdeepseq calcTotalEnergy mols
-      kinetic  = parMap rdeepseq (\x -> calcEk (x ^. getVel) (x ^. getMass)) mols
-  let a1 = writeFile ("TotalEnergyS0") $ concatMap (printf "%.5f\n") totalS0
-      a2 = writeFile ("TotalEnergyS1") $ concatMap (printf "%.5f\n") totalS1
-      a3 = writeFile ("KineticEnergy") $ concatMap (printf "%.5f\n") kinetic
+      {-totalS0 = parMap rdeepseq calcTotalEnergy $ (& getElecSt .~ Left S0) `fmap` mols-}
+      {-total   = parMap rdeepseq calcTotalEnergy mols-}
+  let fun  (x:xs)       = (x,if null xs then 0 else head xs)
+      (totalS0,totalS1) = unzip $ parMap rdeepseq fun $ (^. getEnergy . to head) `fmap` mols
+      kinetic           = parMap rdeepseq (\x -> calcEk (x ^. getVel) (x ^. getMass)) mols
+      a1                = writeFile ("EnergyS0") $ concatMap (printf "%.5f\n") totalS0
+      a2                = writeFile ("EnergyS1") $ concatMap (printf "%.5f\n") totalS1
+      a3                = writeFile ("KineticEnergy") $ concatMap (printf "%.5f\n") kinetic
   parallelLaunch [a1,a2,a3]
   print "Done"
 
