@@ -1,5 +1,4 @@
-{-# Language DeriveFunctor,FlexibleInstances , TemplateHaskell #-}
-
+{-# Language DeriveFunctor,FlexibleInstances , RankNTypes, TemplateHaskell #-}
 
 module CommonTypes where
 
@@ -19,6 +18,8 @@ import Text.Printf
 
 
 -- =============================================================================
+
+
 data Singlet = S0 | S1 | S2 | S3 | S4 deriving (Show,Enum,Eq,Read)
 
 data Triplet = T1 | T2 | T3 | T4 | T5 deriving (Show,Enum,Eq,Read)
@@ -50,6 +51,7 @@ type Force     = Array U DIM1 Double
 type Grad      = Array U DIM1 Double
 type Hess      = Array U DIM2 Double
 type Internals = VU.Vector Double  
+type Vec       = Array U DIM1 Double
 
 type Anchor      = [Int]
 type Args        = String
@@ -110,6 +112,9 @@ data EnergyDerivatives = EnergyDerivatives !Energy !Grad !Hess deriving Show
 data FrankCondon = FC !Internals !Connections deriving Show
 
 
+-- =================> Share Data among top functions <==========
+
+data TopData = TopData (forall a. Getting a InitialDynamics a -> a) Temperature 
 
 -- ========================> Types for Parsing <======================================
 data BlockType = GauBlock | MolBlock deriving Show     
