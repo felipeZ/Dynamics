@@ -156,13 +156,13 @@ processMolcas opts = molcas opts Nothing
   
 processMolcasVel :: Options -> IO ()  
 processMolcasVel opts = do
-  let files@[xyz,velxyz,molcasFile,input] =  optInput opts
+  let files@[input,xyz,velxyz,molcasFile] =  optInput opts
   vs  <- readInitialVel velxyz
   molcas opts $ Just vs   
   
 processMolcasZeroVelocity :: Options -> IO ()
 processMolcasZeroVelocity opts = do
-  let files@[xyz,molcasFile,input] =  optInput opts
+  let files@[input,xyz,molcasFile] =  optInput opts
   vs <- initializeMolcasZeroVel xyz
   molcas opts $ Just vs
 
@@ -172,7 +172,7 @@ processMolcasTinker opts = molcasTinker opts Nothing
 
 processMolcasTinkerVel :: Options -> IO ()
 processMolcasTinkerVel opts = do
-  let files@[tinkerKey,molcasFile,input,velxyz] =  optInput opts      
+  let files@[input,tinkerKey,molcasFile,velxyz] =  optInput opts      
   vs  <- readInitialVel velxyz    
   molcasTinker opts $ Just vs     
   
@@ -226,13 +226,13 @@ processVerletMolcas opts = verletMolcas opts Nothing
   
 processVerletMolcasVel :: Options -> IO ()
 processVerletMolcasVel opts = do
-  let files@[xyz,velxyz,molcasFile,input] =  optInput opts
+  let files@[input,xyz,velxyz,molcasFile] =  optInput opts
   vs   <- readInitialVel velxyz
   verletMolcas opts $ Just vs   
 
 verletMolcas :: Options -> Maybe Vec -> IO ()
 verletMolcas opts vel =  do
-  let files@[xyz,molcasFile,input] =  optInput opts
+  let files@[input,xyz,molcasFile] =  optInput opts
   TopData getter temp   <- topData opts                
   let project = getter getProject
   mol         <- initializeMolcasOntheFly xyz (getter getInitialState) temp
@@ -387,7 +387,7 @@ tullyDriver dt aMatrix step mol =
 processPalmeiro :: Options -> IO ()
 processPalmeiro opts = do
   let temp = fromMaybe 298 $ optTemperature opts
-      files@[xyz,input] =  optInput opts         
+      files@[input,xyz] =  optInput opts         
   initData <- parseFileInput parseInput input
   let getter = (initData ^.)
   initialMol  <- initializeMolcasOntheFly xyz (getter getInitialState) temp
