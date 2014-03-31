@@ -137,7 +137,10 @@ printFiles opts@Options { optInput = files, optDataDir = datadir } = do
             
 -- =========================>  Test API <=====================          
 processPrueba :: Options -> IO ()
-processPrueba opts = undefined
+processPrueba opts = do 
+  let [molcasFile] =  optInput opts      
+  molcasInput         <- parseMolcasInputFile molcasFile
+  print molcasInput
 
 -- ======> Share Data and Functions <=================
 

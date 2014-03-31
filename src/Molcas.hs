@@ -187,7 +187,7 @@ parserCasscf = do
                manyTill anyChar $ char '&'
                try (string "RAS") <|> try (string "Ras") <|> try (string "ras")
                anyLine
-               ini  <- manyTill anyChar (try (string "rlxroot") <|> try (string "Rlxroot") <|> try (string "RlxRoot"))
+               ini  <- manyTill anyChar (try (string "rlxroot") <|> try (string "Rlxroot") <|> try (string "RlxRoot")  <|> try (string "RLXROOT"))
                manyTill anyChar $  (try $ char '=') <|> newline
                spaces 
                n    <- intNumber
