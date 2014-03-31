@@ -168,7 +168,7 @@ launchPalmeiro conex dirs mol =  do
        carts     =  mol ^. getCoord
    (e1,f1) <- interpolation conex internals carts (dirs !! 0)
    (e2,f2) <- interpolation conex internals carts (dirs !! 1)
-   return $ mol & getForce  .~ f1 
+   return $ mol & getForce  .~ f2 
                 & getEnergy .~ [[e1,e2]]
   
 -- Because Palmeiro set of Utilities required a Directory for each electronic state then
@@ -179,7 +179,7 @@ interpolation conex qs carts dir = do
   setCurrentDirectory $ pwd ++ dir
   print $ "Current Directory" ++ pwd ++ dir
   writePalmeiroScript qs
-  launchJob "gfortran  Tools.f90 Diag.f90 CartToInt2.f90 FitSurfMN_linux3.f90 PalmeiroScript.f90 -o PalmeiroScript.o -L/usr/lib64/ -llapack -lblas"
+  launchJob "gfortran  Tools.f90 Diag.f90 CartToInt2.f90 FitSurfMN_linux9.f90 PalmeiroScript.f90 -o PalmeiroScript.o -L/usr/lib/ -llapack -lblas"
   launchJob "chmod u+x PalmeiroScript.o"
   launchJob "./PalmeiroScript.o > /dev/null 2>&1 "
   gradInter <- readVectorUnboxed "Gradient.out"

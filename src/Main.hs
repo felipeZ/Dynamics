@@ -15,7 +15,7 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Parallel.Strategies (parMap,rdeepseq)
 import Control.Lens ((.~),(^.),(&),Getting(..),to)
-import Control.Monad ((<=<),liftM,zipWithM,zipWithM_)
+import Control.Monad ((<=<),liftM,when,zipWithM,zipWithM_)
 import Control.Monad.Trans.Either
 import System.Directory (createDirectoryIfMissing)
 import System.Environment ( getArgs )
@@ -54,12 +54,12 @@ authors = "@2013  Felipe Zapata, Alessio Valentini, Angel Alvarez"
 -- default options
 defaultOptions    = Options
  { optDump        = False
- , optModules     = [("gaussTully",processGauss), ("molcasTully",processMolcas),                                           
+ , optModules     = [("gaussTully",processGauss), ("molcasTully",processMolcas),    
+                     ("gaussVel",processGaussVel),("molcasVel",processMolcasVel),
                      ("verletGaussian",processVerletGaussian),("verletMolcas",processVerletMolcas), 
                      ("verletMolcasVel",processVerletMolcasVel),("verletGaussVel",processVerletGaussVel),
                      ("NVTMolcas",processNVTMolcas),
-                     ("molcasZeroVel",processMolcasZeroVelocity),                                          
-                     ("molcasVel",processMolcasVel),("gaussVel",processGaussVel),
+                     ("molcasZeroVel",processMolcasZeroVelocity),                                                               
                      ("molcasTinker",processMolcasTinker), ("molcasTinkerVel",processMolcasTinkerVel),                     
                      ("palmeiro",processPalmeiro), ("rewriteGateway",processGateway),
                      ("readOut",processReadOut),("calcInternal",processCalcInternals),
@@ -309,8 +309,8 @@ driverVerletGround getter opts job project mol = do
     loop logs job time dt step project molecule = 
          if time < 0 then mapM_ logStop logs
                      else do
-                        newMol  <- velocityVerletForces molecule dt job project [] 0 step
-                        let es = concatMap (printf "%12.6f  ")  $ newMol ^. getEnergy . to head
+                        newMol <- velocityVerletForces molecule dt job project [] 0 step
+                        let es = printEnergies newMol
                         zipWithM_ ($) [printMol newMol es, printData newMol step, printTotalEnergy newMol] logs
                         loop logs job (time-dt) dt (succ step) project newMol
   
@@ -320,16 +320,15 @@ driverNVT getter opts job project temp mol = do
   let numat         = mol ^. getAtoms . to length
       [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
       step          = 1
-      bath     = initializeThermo numat temp      
+      bath          = initializeThermo numat temp      
   loggers <- mapM initLogger ["geometry.out", "result.out","totalEnergy.out"]
   loop loggers job auTime audt step project temp bath mol
+  mapM_ logStop loggers
   
   where
-    loop logs job time dt step project temp bath molecule = 
-         if time < 0 then mapM_ logStop logs
-                     else do
+    loop logs job time dt step project temp bath molecule = when (time > 0) $ do
                         (newMol,newThermo) <- dynamicNoseHoover molecule dt temp bath job project step 
-                        let es = concatMap (printf "%12.6f  ")  $ newMol ^. getEnergy . to head
+                        let es = printEnergies newMol
                         zipWithM_ ($) [printMol newMol es, printData newMol step, printTotalEnergy newMol] logs
                         loop logs job (time-dt) dt (succ step) project temp newThermo newMol  
   
@@ -346,10 +345,9 @@ processVerlet getter opts job project mol = do
   mapM_ logStop loggers
 
 driverVerlet ::  Molecule -> Job -> Time -> DT-> Anchor -> Double -> MatrixCmplx -> Int -> Project  -> [Logger] -> IO () 
-driverVerlet mol job time dt anchor externalForce aMatrix step project loggers = do
-   if time < 0 then return ()
-               else do 
-                let es = concatMap (printf "%.6f  ") $ mol ^. getEnergy . to head
+driverVerlet mol job time dt anchor externalForce aMatrix step project loggers = when (time > 0) action
+  where action = do 
+                let es = printEnergies mol
                 zipWithM_ ($) [printMol mol es, printData mol step, printTotalEnergy mol] loggers                                         
                 newMol                <- velocityVerletForces mol dt job project anchor externalForce step
                 (tullyMol,newAmatrix) <- tullyDriver dt aMatrix step newMol
@@ -360,10 +358,9 @@ driverVerlet mol job time dt anchor externalForce aMatrix step project loggers =
 
   
 constantForceDynamics ::  Molecule -> Job -> Thermo -> Temperature -> Time -> DT-> Anchor -> Double -> MatrixCmplx -> Int -> Project  -> [Logger] -> IO ()
-constantForceDynamics mol job thermo temp time dt anchor externalForce aMatrix step project loggers = do
-   if time < 0.0 then return ()
-                 else do 
-                  let es = concatMap (printf "%.6f  ") $ mol ^. getEnergy . to head
+constantForceDynamics mol job thermo temp time dt anchor externalForce aMatrix step project loggers = when (time > 0) action
+  where action =  do 
+                  let es = printEnergies mol 
                   zipWithM_ ($) [printMol mol es, printData mol step, printTotalEnergy mol] loggers
                   (newMol,newThermo)    <- dynamicExternalForces mol dt temp thermo job project anchor externalForce step
                   (tullyMol,newAmatrix) <- tullyDriver dt aMatrix step newMol
@@ -380,36 +377,37 @@ tullyDriver dt aMatrix step mol =
      then return (mol,aMatrix) 
      else tullyHS dt aMatrix step mol
 
+     
+printEnergies :: Molecule -> String
+printEnergies mol = concatMap (printf "%.6f  ") $ mol ^. getEnergy . to head     
+
   -- =============> Drivers to call Palmeiro Interpolator <======================================
 
 -- | Molecular Dynamics using interpolated PES 
 processPalmeiro :: Options -> IO ()
 processPalmeiro opts = do
-  let temp = fromMaybe 298 $ optTemperature opts
-      [input,xyz] =  optInput opts         
-  initData <- parseFileInput parseInput input
-  let getter = (initData ^.)
-  initialMol  <- initializeMolcasOntheFly xyz (getter getInitialState) temp
-  ctl         <- getSuffixFile "." ".ctl"
-  conex       <- parserFileInternasCtl ctl
-  let numat = initialMol ^. getAtoms . to length
-      [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
-      thermo        = initializeThermo numat temp
-      job           = Palmeiro conex ["/S0","/S1"]
-  loggers <- mapM initLogger ["geometry.out", "result.out"]
-  palmeiroLoop initialMol audt temp thermo job "" 1 loggers
-  mapM_ logStop loggers       
+   let [input,xyz,ctl]     =  optInput opts
+   TopData getter temp <- topData opts
+   initialMol <- initializeMolcasOntheFly xyz (getter getInitialState) temp
+   conex      <- parserFileInternasCtl ctl  
+   let numat = initialMol ^. getAtoms . to length
+       [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
+       thermo        = initializeThermo numat temp
+       job           = Palmeiro conex ["/S0","/S1"]
+   loggers <- mapM initLogger ["geometry.out", "result.out"]
+   palmeiroLoop initialMol audt temp thermo job "" 1 loggers
+   mapM_ logStop loggers       
 
   
 palmeiroLoop :: Molecule -> DT -> Temperature -> Thermo -> Job -> String -> Step -> [Logger] -> IO ()
-palmeiroLoop  mol dt t thermo job project step loggers = do
-    print $ "Step: " ++ show step
-    if t > 0 then do
-                  (newMol,newThermo) <- dynamicNoseHoover mol dt t thermo job project step 
-                  zipWithM_ ($) [printMol mol "", printData mol step] loggers                                         
-                  return ()
+palmeiroLoop  mol dt t thermo job project step loggers = when (t > 0) action
+
+  where action = do 
+            print $ "Step: " ++ show step
+            (newMol,newThermo) <- dynamicNoseHoover mol dt t thermo job project step 
+--             zipWithM_ ($) [printMol mol "", printData mol step] loggers                                         
+            return ()
 --                   palmeiroLoop newMol dt (t - dt) newThermo job project (succ step) loggers
-             else return ()     
      
 -- ===================> Miscallaneus Functions <================
 addExternalVec :: Molecule -> Maybe Vec -> Molecule
