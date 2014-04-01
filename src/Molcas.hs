@@ -520,7 +520,7 @@ sectionMolecularGradients = try $ do
     spaces
     elements       <- many1 molecularGradient
     let n = (`div`3) $ length elements
-    espf           <- option [] $ parserGradESPF n
+    espf           <-  option [] $ try $ parserGradESPF n
     return $ AlaskaMolecularGradients representation elements espf
         
 -- Try parse molecular gradients items from alaska

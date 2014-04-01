@@ -138,9 +138,9 @@ printFiles opts@Options { optInput = files, optDataDir = datadir } = do
 -- =========================>  Test API <=====================          
 processPrueba :: Options -> IO ()
 processPrueba opts = do 
-  let [molcasFile] =  optInput opts      
-  molcasInput         <- parseMolcasInputFile molcasFile
-  print molcasInput
+  let [input] =  optInput opts      
+  m   <- parseMolcasOutputFile  "HopS.out"
+  print m
 
 -- ======> Share Data and Functions <=================
 
@@ -159,7 +159,7 @@ processMolcas opts = molcas opts Nothing
   
 processMolcasVel :: Options -> IO ()  
 processMolcasVel opts = do
-  let [input,xyz,velxyz,molcasFile] =  optInput opts
+  let [input,xyz,molcasFile,velxyz] =  optInput opts
   vs  <- readInitialVel velxyz
   molcas opts $ Just vs   
   

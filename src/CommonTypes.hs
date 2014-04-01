@@ -148,11 +148,11 @@ data MolBlock =
     | ProjectData String String String String                -- Project details, submission, scratch dir etc...
     | ModuleAuto Name String [ModuleData]                    -- Molcas auto module and all moules it ran
     | TextData    String                                     -- just unformatted text as we got it 
-
+ 
 -- Most Molcas modules run from the auto module since the latter control flow of execution
 data ModuleData = 
      ModuleData Name String [SectionData]                    -- Molcas modules data stored in sections 
-
+     
 -- Every molcas module produces some data results, some of them have diferenciated types for better exploitation...
 data SectionData = 
       WhateverData String                                    -- Data not really parsed and left as unformatted data
@@ -163,14 +163,13 @@ data SectionData =
     | RasSCFRE [(Int,Double)]                                -- RASSCF Energies
     | AlaskaData String                                      -- Alaska unformatted output
     | AlaskaMolecularGradients String [(String,Char,Double)] [[Double]] -- Alaska Molecular Gradients and optional Gradient after ESPF
-
+    
 -- Common state record to all Molcas parsers
 data MolState = MolState 
     { 
           blockLevel   :: [BlockParser]                       -- Block level Molcas blocks
         , sectionLevel :: [SectionParser]                     -- Section Level Molcas Blocks
     }
-
          
 
 -- =================> Types for Dynamics <===============
