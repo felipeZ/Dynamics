@@ -291,7 +291,7 @@ readInitialVel xyz = do
 -- ===================> <==================
 -- | String to Nuclear Charge
 atom2Mass :: M.Map String Double 
-atom2Mass = M.fromList [("H",1.00782504),("C",12.0),("N",14.0),("O",16.0)]
+atom2Mass = M.fromList [("H",1.0000000203387491),("C",12.000000244064989),("N",14.000000284742487),("O",16.0)]
   
 
 

@@ -111,12 +111,12 @@ bath mol dt t thermo@(Thermo q1 q2 vx1 vx2) =
       n    = mol ^. getAtoms . to (fromIntegral . length)
       ek   = calcEk vel mass
       g2   = (q1*vx1^2 - t*kb)/q2
-      g1   = (2.0*ek -3.0*n*t*kb)/q1
+      g1   = (2*ek -3*n*t*kb)/q1
       vx4  = vx2 + g2*dt4
       vx3  = (\x-> x*exp(-vx4*dt8)) . (\x -> x + g1*dt4) . (\x -> x*exp(-vx4*dt8)) $ vx1
 
       s = exp(-vx3*dt2)
-      newVel = R.computeS . R.map (*s) $ vel
+      newVel = R.computeUnboxedS . R.map (*s) $ vel
       ek2 = ek*s^2
 
       g3 = (2.0*ek2 -3.0*n*t*kb)/q1
@@ -134,8 +134,8 @@ bath mol dt t thermo@(Thermo q1 q2 vx1 vx2) =
 noseHoover1 :: Molecule ->  DT -> Temperature -> Thermo -> (Molecule,Thermo)
 noseHoover1 mol dt t thermo = (newMol,newThermo)
   where (mol2,newThermo) = bath mol dt t thermo
-        newMol = (\x y -> moveVel y . moveCoord y $ x) mol2 dt
-
+        newMol = (\x y -> moveVel y . moveCoord y $ x) mol2 dt      
+        
 noseHoover2 :: Molecule -> DT -> Temperature -> Thermo -> (Molecule,Thermo)
 noseHoover2  mol dt t thermo = bath mol2 dt t thermo
   where mol2 = moveVel dt mol

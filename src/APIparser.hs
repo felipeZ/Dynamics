@@ -85,7 +85,12 @@ interactWith job project step mol =
                            io2 = writeFile (project ++ ".input") $ concatMap show inputData
                        concurrently io1 io2 
                        launchMolcasLocal project
-                       parseMolcas project ["Grad","Roots"] mol                                 
+                       parseMolcas project ["Grad","Roots"] mol 
+{-                       let newL = "\n"
+                       system $ "cat grad >> Prueba; printf \"" ++ newL ++ "\" >> Prueba"
+                       fs <- (computeUnboxedS . R.map (negate) . (\xs -> fromUnboxed (ix1 $ VU.length xs) xs)) `liftM` readVectorUnboxed "grad"
+                       parseMolcas project ["Roots"] $ mol & getForce .~  fs   -}                         
+                       
                                   
      MolcasTinker inputData molcasQM ->  do 
                  print "rewrite Molcas input"
@@ -166,8 +171,9 @@ launchPalmeiro :: Connections -> [FilePath] -> Molecule -> IO Molecule
 launchPalmeiro conex dirs mol =  do
    let internals = calcInternals conex mol
        carts     =  mol ^. getCoord
-   (e1,f1) <- interpolation conex internals carts (dirs !! 0)
-   (e2,f2) <- interpolation conex internals carts (dirs !! 1)
+       action x = interpolation conex internals carts (dirs !! x)
+   (e1,f1) <- action 0
+   (e2,f2) <- action 1
    return $ mol & getForce  .~ f2 
                 & getEnergy .~ [[e1,e2]]
   
@@ -179,7 +185,7 @@ interpolation conex qs carts dir = do
   setCurrentDirectory $ pwd ++ dir
   print $ "Current Directory" ++ pwd ++ dir
   writePalmeiroScript qs
-  launchJob "gfortran  Tools.f90 Diag.f90 CartToInt2.f90 FitSurfMN_linux9.f90 PalmeiroScript.f90 -o PalmeiroScript.o -L/usr/lib/ -llapack -lblas"
+  launchJob "gfortran  Tools.f90 Diag.f90 CartToInt2.f90 FitSurfMN_linux10.f90 PalmeiroScript.f90 -o PalmeiroScript.o -L/usr/lib/ -llapack -lblas"
   launchJob "chmod u+x PalmeiroScript.o"
   launchJob "./PalmeiroScript.o > /dev/null 2>&1 "
   gradInter <- readVectorUnboxed "Gradient.out"
@@ -234,7 +240,7 @@ launchMolcasLocal project = do
    let input = project ++ ".input"
        out   = project ++ ".out"
        err   = project ++ ".err"
-   launchJob $ "molcas  " ++ input ++ ">  " ++ out ++ " 2>  " ++ err 
+   launchJob $ "export WorkDir=$PWD; molcas  " ++ input ++ ">  " ++ out ++ " 2>  " ++ err 
 
 -- If there is an initial output of Molcas do not repeat it, simply parse it   
 firsStepMolcas :: Job -> String -> Int -> Molecule -> IO Molecule
@@ -561,7 +567,7 @@ calcElectSt mol =
 
 
 readVectorUnboxed :: FilePath -> IO (VU.Vector Double)
-readVectorUnboxed file = C.readFile file >>= \s -> return $ parseUnboxed s
+readVectorUnboxed file = C.readFile file >>= return . parseUnboxed
 
 parseUnboxed ::C.ByteString -> VU.Vector Double
 parseUnboxed = VU.unfoldr step

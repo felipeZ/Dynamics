@@ -58,7 +58,7 @@ defaultOptions    = Options
                      ("gaussVel",processGaussVel),("molcasVel",processMolcasVel),
                      ("verletGaussian",processVerletGaussian),("verletMolcas",processVerletMolcas), 
                      ("verletMolcasVel",processVerletMolcasVel),("verletGaussVel",processVerletGaussVel),
-                     ("NVTMolcas",processNVTMolcas),
+                     ("NVTMolcas",processNVTMolcas),("NVTMolcasVel",processNVTMolcasVel),
                      ("molcasZeroVel",processMolcasZeroVelocity),                                                               
                      ("molcasTinker",processMolcasTinker), ("molcasTinkerVel",processMolcasTinkerVel),                     
                      ("palmeiro",processPalmeiro), ("rewriteGateway",processGateway),
@@ -212,15 +212,24 @@ molcasDriver getter opts job temp initialMol = do
   mapM_ logStop loggers
     
 -- | Simple Constant temperature dynamics
+processNVTMolcasVel :: Options -> IO ()
+processNVTMolcasVel opts = do
+  let [input,xyz,molcasFile,velxyz] =  optInput opts
+  vs   <- readInitialVel velxyz
+  processNVT opts $ Just vs
+  
 processNVTMolcas :: Options -> IO ()
-processNVTMolcas opts =do
-  let [input,xyz,molcasFile] =  optInput opts
+processNVTMolcas opts = processNVT opts Nothing
+
+processNVT :: Options -> Maybe Vec -> IO ()
+processNVT opts vel = do
+  let (input:xyz:molcasFile:_) =  optInput opts
   TopData getter temp   <- topData opts          
   molcasInput  <- parseMolcasInputFile molcasFile
   let project  = getter getProject
       job      =  Molcas molcasInput
   initialMol   <- initializeMolcasOntheFly xyz (getter getInitialState) temp
-  driverNVT getter opts job project temp initialMol
+  driverNVT getter opts job project temp $ addExternalVec initialMol vel
              
 -- | Velocity Verlet Molcas                           
 processVerletMolcas :: Options -> IO ()
@@ -237,11 +246,14 @@ verletMolcas opts vel =  do
   let (input:xyz:molcasFile:_) =  optInput opts
   TopData getter temp   <- topData opts                
   let project = getter getProject
-  mol         <- initializeMolcasOntheFly xyz (getter getInitialState) temp
+  initialMol  <- initializeMolcasOntheFly xyz (getter getInitialState) temp
   molcasInput <- parseMolcasInputFile molcasFile
   let job     = Molcas molcasInput
-  processVerlet getter opts job project $ addExternalVec mol vel    
-                               
+      step    = 1
+      mol2 = addExternalVec initialMol vel
+  processVerlet getter opts job project mol2
+       
+       
 -- =============> Functions to run the molecular dynamics simulations in Gaussian <==============
 processGauss :: Options -> IO ()
 processGauss opts = gaussian opts Nothing
@@ -440,12 +452,13 @@ processReadOut opts = do
   mols <- parserGeomVel out initialMol         
       {-totalS0 = parMap rdeepseq calcTotalEnergy $ (& getElecSt .~ Left S0) `fmap` mols-}
       {-total   = parMap rdeepseq calcTotalEnergy mols-}
-  let fun  (x:xs)       = (x,if null xs then 0 else head xs)
-      (totalS0,totalS1) = unzip $ parMap rdeepseq fun $ (^. getEnergy . to head) `fmap` mols
+  let fun  (x:y:xs)       = (x,y,if null xs then 0 else head xs)
+      (totalS0,totalS1,totalS2) = unzip3 $ parMap rdeepseq fun $ (^. getEnergy . to head) `fmap` mols
       kinetic           = parMap rdeepseq (\x -> calcEk (x ^. getVel) (x ^. getMass)) mols
       a1                = writeFile ("EnergyS0") $ concatMap (printf "%.5f\n") totalS0
       a2                = writeFile ("EnergyS1") $ concatMap (printf "%.5f\n") totalS1
-      a3                = writeFile ("KineticEnergy") $ concatMap (printf "%.5f\n") kinetic
+      a3                = writeFile ("EnergyS2") $ concatMap (printf "%.5f\n") totalS2    
+      a4                = writeFile ("KineticEnergy") $ concatMap (printf "%.5f\n") kinetic
   parallelLaunch [a1,a2,a3]
   print "Done"
 
