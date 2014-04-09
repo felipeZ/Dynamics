@@ -481,7 +481,7 @@ processCalcInternals opts = do
   
 processConstrained :: Options -> IO ()
 processConstrained opts =  do
-  let file@[xyz] =  optInput opts
+  let file@[input,xyz] =  optInput opts
   TopData getter temp <-  topData opts
   initialMol          <- initializeMolcasOntheFly xyz S0 temp
   let theoryLevels = getter getTheory
