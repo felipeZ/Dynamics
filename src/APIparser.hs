@@ -85,11 +85,11 @@ interactWith job project step mol =
                            io2 = writeFile (project ++ ".input") $ concatMap show inputData
                        concurrently io1 io2 
                        launchMolcasLocal project
-                       parseMolcas project ["Grad","Roots"] mol 
-{-                       let newL = "\n"
+--                        parseMolcas project ["Grad","Roots"] mol 
+                       let newL = "\n"
                        system $ "cat grad >> Prueba; printf \"" ++ newL ++ "\" >> Prueba"
                        fs <- (computeUnboxedS . R.map (negate) . (\xs -> fromUnboxed (ix1 $ VU.length xs) xs)) `liftM` readVectorUnboxed "grad"
-                       parseMolcas project ["Roots"] $ mol & getForce .~  fs   -}                         
+                       parseMolcas project ["Roots"] $ mol & getForce .~  fs                            
                        
                                   
      MolcasTinker inputData molcasQM ->  do 

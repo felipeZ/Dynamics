@@ -138,9 +138,7 @@ printFiles opts@Options { optInput = files, optDataDir = datadir } = do
 -- =========================>  Test API <=====================          
 processPrueba :: Options -> IO ()
 processPrueba opts = do 
-  let [input] =  optInput opts      
-  m   <- parseMolcasOutputFile  "HopS.out"
-  print m
+  print $ optTemperature opts
 
 -- ======> Share Data and Functions <=================
 
@@ -335,9 +333,10 @@ driverNVT getter opts job project temp mol = do
   let numat         = mol ^. getAtoms . to length
       [auTime,audt] = fmap (/au_time) $ getter `fmap` [getTime,getdt] 
       step          = 1
-      bath          = initializeThermo numat temp      
+      bath          = initializeThermo numat temp
+  newMol  <- interactWith job project step mol
   loggers <- mapM initLogger ["geometry.out", "result.out","totalEnergy.out"]
-  loop loggers job auTime audt step project temp bath mol
+  loop loggers job auTime audt step project temp bath newMol
   mapM_ logStop loggers
   
   where
@@ -365,11 +364,12 @@ driverVerlet mol job time dt anchor externalForce aMatrix step project loggers =
                 let es = printEnergies mol
                 zipWithM_ ($) [printMol mol es, printData mol step, printTotalEnergy mol] loggers                                         
                 newMol                <- velocityVerletForces mol dt job project anchor externalForce step
-                (tullyMol,newAmatrix) <- tullyDriver dt aMatrix step newMol
-                printGnuplot newAmatrix tullyMol
-                let [oldRoot,newRoot] = (^.getElecSt) `fmap` [newMol,tullyMol]
-                    newJob            =  if oldRoot == newRoot then job else updateNewJobInput job tullyMol
-                driverVerlet tullyMol newJob (time-dt) dt anchor externalForce newAmatrix (succ step) project loggers
+                driverVerlet newMol job (time-dt) dt anchor externalForce aMatrix (succ step) project loggers
+--                 (tullyMol,newAmatrix) <- tullyDriver dt aMatrix step newMol
+--                 printGnuplot newAmatrix tullyMol
+--                 let [oldRoot,newRoot] = (^.getElecSt) `fmap` [newMol,tullyMol]
+--                     newJob            =  if oldRoot == newRoot then job else updateNewJobInput job tullyMol
+--                 driverVerlet tullyMol newJob (time-dt) dt anchor externalForce newAmatrix (succ step) project loggers
 
   
 constantForceDynamics ::  Molecule -> Job -> Thermo -> Temperature -> Time -> DT-> Anchor -> Double -> MatrixCmplx -> Int -> Project  -> [Logger] -> IO ()
@@ -480,7 +480,15 @@ processCalcInternals opts = do
   mapM_ wait ids
   
 processConstrained :: Options -> IO ()
-processConstrained = undefined
-
-
+processConstrained opts =  do
+  let file@[xyz] =  optInput opts
+  TopData getter temp <-  topData opts
+  initialMol          <- initializeMolcasOntheFly xyz S0 temp
+  let theoryLevels = getter getTheory
+      basis        = getter getBasis
+      job          = Gaussian (theoryLevels,basis)
+      anchor       = getter getForceAnchor
+      norm         = getter getExtForceMod
+      project      = getter getProject
+  driverConstrainedOptimizer initialMol job project anchor norm
  

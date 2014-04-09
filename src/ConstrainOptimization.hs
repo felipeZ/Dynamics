@@ -2,6 +2,8 @@
 module ConstrainOptimization where
 
 import Control.Applicative
+import Control.Concurrent.Async
+import Control.Monad ((<=<))
 import Control.Lens hiding ((<.>))
 import Data.Array.Repa as R
 import qualified Data.List as DL
@@ -23,15 +25,16 @@ type Position = Vector Double
 type Step = Int
                                    
 -- ===============>   <============
-
-driverConstrainedOptimizer :: Job -> String -> Molecule ->  (Int,Int) -> Double -> IO ()
-driverConstrainedOptimizer job project mol (n,m) norm = do
+driverConstrainedOptimizer ::Molecule -> Job -> String ->  [Int] -> Double -> IO ()
+driverConstrainedOptimizer mol job project [n,m] norm = do
 --   let gext = computeUnboxedS . R.map (*(-1)) $ calcFext (n,m) (norm/auN) mol
   let gext = calcFext (n,m) (norm/auN) mol
       hess = buildMatrix (dim) (dim) (\(i,j) -> if i==j then 1 else 0)
       dij x y = if x == y then 1.0 else 0.0
       (Z:. dim) =  mol ^. getForce . to extent 
-  result <- mainLoop job project mol hess gext 0
+      step = 1
+  newMol <- interactWith job project step mol
+  result <- wait <=< async $ mainLoop job project newMol hess gext 2
   putStrLn "successful convergence!!"
                           
 mainLoop :: Job -> String -> Molecule -> Hessian -> ExternalGrad -> Step -> IO Molecule

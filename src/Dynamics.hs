@@ -143,9 +143,10 @@ noseHoover2  mol dt t thermo = bath mol2 dt t thermo
 
 dynamicNoseHoover :: Molecule -> DT -> Temperature -> Thermo -> Job -> Project -> Int -> IO (Molecule,Thermo)  
 dynamicNoseHoover !mol !dt !t thermo job project step = do  
-       let (mol1,thermo1) = noseHoover1 mol dt t thermo      
+       let (mol1,thermo1) = noseHoover1 mol dt t thermo
        mol2 <- interactWith job project step mol1
        return $ noseHoover2 mol2 dt t thermo1
+                 
  
 dynamicExternalForces ::  Molecule -> DT -> Temperature -> Thermo -> Job -> String -> Anchor -> Double -> Int -> IO (Molecule,Thermo)  
 dynamicExternalForces !mol !dt !t thermo job project anchor modForceExt step = do  
@@ -167,7 +168,7 @@ initializeThermo numat t  = Thermo q1 q2 vx1 vx2
 
 appliedForce :: Anchor -> Double -> Molecule -> Molecule
 appliedForce xs modForceExt mol | null xs = mol 
-appliedForce [m,n] modForceExt mol = set getForce newForce mol
+appliedForce [m,n] modForceExt mol =  set getForce newForce mol
   where [v1,v2] = fmap (\j -> let i = 3*(pred j) in fmap (forceVector !) [(Z:.i),(Z:.i+1),(Z:.i+2)]) [m,n]
         forceVector = mol ^. getForce
         modauN = modForceExt * (recip $ 10^9) / auN
