@@ -6,6 +6,7 @@ import Control.Applicative
 import Control.Arrow ((&&&),(***))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
+import Control.Concurrent.MVar
 import Control.Exception (SomeException,catch)
 import Control.Lens
 import Control.Monad 
@@ -133,7 +134,9 @@ parallelLaunch actions = foldr conc (return []) actions
              (x,xs) <- concurrently io ios
              return (x:xs)
 
-                        
+atomicallyIO :: MVar () -> IO a -> IO a
+atomicallyIO lock action = withMVar lock $ \_ -> withAsync action wait
+
 -- ============> Tully Updates <=========
 updateCoeffEnergies :: [Energy] -> [[Double]] -> Molecule -> Molecule
 updateCoeffEnergies energies coeff mol = 
@@ -172,27 +175,27 @@ launchPalmeiro conex dirs mol =  do
    let internals = calcInternals conex mol
        carts     =  mol ^. getCoord
        action x = interpolation conex internals carts (dirs !! x)
-   (e1,f1) <- action 0
+--    (e1,f1) <- action 0
    (e2,f2) <- action 1
    return $ mol & getForce  .~ f2 
-                & getEnergy .~ [[e1,e2]]
+                & getEnergy .~ [[0,e2]]
   
 -- Because Palmeiro set of Utilities required a Directory for each electronic state then
 -- there are created as many directories as electronic states involved 
 interpolation :: Connections -> Internals -> Coordinates -> FilePath -> IO (Energy,Force)  
 interpolation conex qs carts dir = do
-  pwd <- getCurrentDirectory
-  setCurrentDirectory $ pwd ++ dir
-  print $ "Current Directory" ++ pwd ++ dir
+--   pwd <- getCurrentDirectory
+--   setCurrentDirectory $ pwd ++ dir
+--   print $ "Current Directory" ++ pwd ++ dir
   writePalmeiroScript qs
-  launchJob "gfortran  Tools.f90 Diag.f90 CartToInt2.f90 FitSurfMN_linux10.f90 PalmeiroScript.f90 -o PalmeiroScript.o -L/usr/lib/ -llapack -lblas"
+  launchJob "gfortran  Tools.f90 Diag.f90 CartToInt2.f90 FitSurfMN_linux12.f90 PalmeiroScript.f90 -o PalmeiroScript.o -L/usr/lib/ -llapack -lblas"
   launchJob "chmod u+x PalmeiroScript.o"
-  launchJob "./PalmeiroScript.o > /dev/null 2>&1 "
+  launchJob "./PalmeiroScript.o >> salidaPalmeiro.out "
   gradInter <- readVectorUnboxed "Gradient.out"
   energy    <- (head . VU.toList) `fmap` readVectorUnboxed "Energy.out"
   grad      <- transform2Cart conex gradInter carts 
   let force = R.computeUnboxedS $  R.map negate grad
-  setCurrentDirectory pwd
+--   setCurrentDirectory pwd
   print gradInter
   return (energy,force)
 
@@ -609,7 +612,7 @@ writePalmeiroScript qs = do
       dim = (show $ VU.length qs)
       l2 = spaces ++ "NumberCoord="++ dim ++ "\n\n"
       l3 = concatMap (spaces++) ["Call ReadDataFiles('./',.True.,IErr)\n\n","Allocate(Inpq(1:NumberCoord),g(1:NumberCoord),H(1:NumberCoord*(NumberCoord+1)/2))\n"]      
-      l4 = concatMap (spaces++) ["Call InterpolatePES(Inpq,IErr,NewSimplex,E,g,H)\n", "If (IErr>0) Print *,'InterpolatePES Has FAILED!.'\n", "Print *, 'Gradient'\n",
+      l4 = concatMap (spaces++) ["Call InterpolatePES(Inpq,IErr,NewSimplex,E,g,H)\n", "If (IErr>0) Print *,'InterpolatePES Has FAILED!.'\n",
                                  "open (unit=112, file='Gradient.out',status='replace',action='write')\n",
                                  "open (unit=113, file='Energy.out',status='replace',action='write')\n",
                                  "write(unit=112,fmt=*)  (real(g(i)) ,i=1," ++ dim ++ ")\n",                                 

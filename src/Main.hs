@@ -364,12 +364,11 @@ driverVerlet mol job time dt anchor externalForce aMatrix step project loggers =
                 let es = printEnergies mol
                 zipWithM_ ($) [printMol mol es, printData mol step, printTotalEnergy mol] loggers                                         
                 newMol                <- velocityVerletForces mol dt job project anchor externalForce step
-                driverVerlet newMol job (time-dt) dt anchor externalForce aMatrix (succ step) project loggers
---                 (tullyMol,newAmatrix) <- tullyDriver dt aMatrix step newMol
---                 printGnuplot newAmatrix tullyMol
---                 let [oldRoot,newRoot] = (^.getElecSt) `fmap` [newMol,tullyMol]
---                     newJob            =  if oldRoot == newRoot then job else updateNewJobInput job tullyMol
---                 driverVerlet tullyMol newJob (time-dt) dt anchor externalForce newAmatrix (succ step) project loggers
+                (tullyMol,newAmatrix) <- tullyDriver dt aMatrix step newMol
+                printGnuplot newAmatrix tullyMol
+                let [oldRoot,newRoot] = (^.getElecSt) `fmap` [newMol,tullyMol]
+                    newJob            =  if oldRoot == newRoot then job else updateNewJobInput job tullyMol
+                driverVerlet tullyMol newJob (time-dt) dt anchor externalForce newAmatrix (succ step) project loggers
 
   
 constantForceDynamics ::  Molecule -> Job -> Thermo -> Temperature -> Time -> DT-> Anchor -> Double -> MatrixCmplx -> Int -> Project  -> [Logger] -> IO ()
@@ -410,19 +409,18 @@ processPalmeiro opts = do
        thermo        = initializeThermo numat temp
        job           = Palmeiro conex ["/S0","/S1"]
    loggers <- mapM initLogger ["geometry.out", "result.out"]
-   palmeiroLoop initialMol audt temp thermo job "" 1 loggers
-   mapM_ logStop loggers       
-
+--    palmeiroLoop initialMol audt temp thermo job "" 1 loggers
+   driverNVT getter opts job "Palmeiro" temp initialMol
+   mapM_ logStop loggers         
   
-palmeiroLoop :: Molecule -> DT -> Temperature -> Thermo -> Job -> String -> Step -> [Logger] -> IO ()
-palmeiroLoop  mol dt t thermo job project step loggers = when (t > 0) action
-
-  where action = do 
-            print $ "Step: " ++ show step
-            (newMol,newThermo) <- dynamicNoseHoover mol dt t thermo job project step 
+-- palmeiroLoop :: Molecule -> DT -> Temperature -> Thermo -> Job -> String -> Step -> [Logger] -> IO ()
+-- palmeiroLoop  mol dt t thermo job project step loggers = when (t > 0) action
+-- 
+--   where action = do 
+--             print $ "Step: " ++ show step
+--             (newMol,newThermo) <- dynamicNoseHoover mol dt t thermo job project step 
 --             zipWithM_ ($) [printMol mol "", printData mol step] loggers                                         
-            return ()
---                   palmeiroLoop newMol dt (t - dt) newThermo job project (succ step) loggers
+--             palmeiroLoop newMol dt (t - dt) newThermo job project (succ step) loggers
      
 -- ===================> Miscallaneus Functions <================
 addExternalVec :: Molecule -> Maybe Vec -> Molecule
