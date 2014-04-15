@@ -85,13 +85,8 @@ interactWith job project step mol =
                        let io1 = writeMolcasXYZ (project ++ ".xyz") mol
                            io2 = writeFile (project ++ ".input") $ concatMap show inputData
                        concurrently io1 io2 
-                       launchMolcasLocal project
---                        parseMolcas project ["Grad","Roots"] mol 
-                       let newL = "\n"
-                       system $ "cat grad >> Prueba; printf \"" ++ newL ++ "\" >> Prueba"
-                       fs <- (computeUnboxedS . R.map (negate) . (\xs -> fromUnboxed (ix1 $ VU.length xs) xs)) `liftM` readVectorUnboxed "grad"
-                       parseMolcas project ["Roots"] $ mol & getForce .~  fs                            
-                       
+                       launchMolcas project job
+                       parseMolcas project ["Grad","Roots"] mol                                                    
                                   
      MolcasTinker inputData molcasQM ->  do 
                  print "rewrite Molcas input"
@@ -235,7 +230,7 @@ launchMolcas project job =do
   case r of
        ExitFailure _ -> launchMolcasLocal project -- not I am not
        ExitSuccess   -> case job of  -- I am in a cluster!!
-                             MolcasTinker _arg1 _arg2 -> writeShellPBS project >> launchCluster "qsub" (project ++ ".sh")
+                             MolcasTinker _arg1 _arg2 -> launchCluster "Dynamics" (project ++ ".sh") >> launchJob "copyNow.sh"
                              Molcas  _arg1            -> launchCluster "Molcas" $ project ++ ".input" 
        
 launchMolcasLocal :: Project ->  IO ()

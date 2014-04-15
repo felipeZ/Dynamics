@@ -409,18 +409,9 @@ processPalmeiro opts = do
        thermo        = initializeThermo numat temp
        job           = Palmeiro conex ["/S0","/S1"]
    loggers <- mapM initLogger ["geometry.out", "result.out"]
---    palmeiroLoop initialMol audt temp thermo job "" 1 loggers
    driverNVT getter opts job "Palmeiro" temp initialMol
    mapM_ logStop loggers         
   
--- palmeiroLoop :: Molecule -> DT -> Temperature -> Thermo -> Job -> String -> Step -> [Logger] -> IO ()
--- palmeiroLoop  mol dt t thermo job project step loggers = when (t > 0) action
--- 
---   where action = do 
---             print $ "Step: " ++ show step
---             (newMol,newThermo) <- dynamicNoseHoover mol dt t thermo job project step 
---             zipWithM_ ($) [printMol mol "", printData mol step] loggers                                         
---             palmeiroLoop newMol dt (t - dt) newThermo job project (succ step) loggers
      
 -- ===================> Miscallaneus Functions <================
 addExternalVec :: Molecule -> Maybe Vec -> Molecule
