@@ -27,7 +27,6 @@ import Data.Maybe (fromMaybe)
 import qualified Data.Map as M
 import qualified Data.Monoid as DM
 import Data.Random.Normal
-import System.IO.Strict as IOS
 import System.Random
 import Text.Parsec
 import Text.Parsec.ByteString

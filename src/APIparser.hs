@@ -230,7 +230,7 @@ launchMolcas project job =do
   case r of
        ExitFailure _ -> launchMolcasLocal project -- not I am not
        ExitSuccess   -> case job of  -- I am in a cluster!!
-                             MolcasTinker _arg1 _arg2 -> launchCluster "Dynamics" (project ++ ".sh") >> launchJob "copyNow.sh"
+                             MolcasTinker _arg1 _arg2 -> launchCluster "Dynamics" (project ++ ".input") >> launchJob "./copyNow.sh"
                              Molcas  _arg1            -> launchCluster "Molcas" $ project ++ ".input" 
        
 launchMolcasLocal :: Project ->  IO ()

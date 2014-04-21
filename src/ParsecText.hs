@@ -14,6 +14,10 @@ oneOfStrings listOfStrings = choice $ map (try . string) listOfStrings
 anyLine :: MyParser st String
 anyLine = manyTill anyChar newline     -- whatever chars we find till we hit a newline
 
+newline_ :: MyParser st ()
+newline_ = newline >> return ()
+
+
 -- Parser a line containing some string
 stringLine :: String -> MyParser st String
 stringLine str = do
