@@ -169,9 +169,9 @@ launchPalmeiro :: Connections -> [FilePath] -> Molecule -> IO Molecule
 launchPalmeiro conex dirs mol =  do
    let internals = calcInternals conex mol
        carts     =  mol ^. getCoord
-       action x = interpolation conex internals carts (dirs !! x)
+       action    = interpolation conex internals carts "." {-(dirs !! x)-}
 --    (e1,f1) <- action 0
-   (e2,f2) <- action 1
+   (e2,f2) <- action
    return $ mol & getForce  .~ f2 
                 & getEnergy .~ [[0,e2]]
   

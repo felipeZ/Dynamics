@@ -168,14 +168,15 @@ initializeThermo numat t  = Thermo q1 q2 vx1 vx2
 
 appliedForce :: Anchor -> Double -> Molecule -> Molecule
 appliedForce xs modForceExt mol | null xs = mol 
-appliedForce [m,n] modForceExt mol =  set getForce newForce mol
-  where [v1,v2] = fmap (\j -> let i = 3*(pred j) in fmap (forceVector !) [(Z:.i),(Z:.i+1),(Z:.i+2)]) [m,n]
-        forceVector = mol ^. getForce
-        modauN = modForceExt * (recip $ 10^9) / auN
-        deltaF = fmap (*modauN) . normalize $ DL.zipWith (-) v2 v1
-        forceExt = R.fromListUnboxed sh $ DL.concat [sparseList x m n deltaF | x <- [0..pred numat]]
-        newForce = computeUnboxedS $ forceVector +^ forceExt
-        numat = dim `div` 3
+appliedForce [m,n] modForceExt mol =  mol & getForce .~ newForce 
+  where [v1,v2]      = fmap (\j -> let i = 3*(pred j) in fmap (coord !) [(Z:.i),(Z:.i+1),(Z:.i+2)]) [m,n]
+        coord        = mol ^. getCoord
+        forceVector  = mol ^. getForce
+        modauN       = modForceExt * (recip $ 10^9) / auN
+        deltaF       = fmap (*modauN) . normalize $ DL.zipWith (-) v2 v1
+        forceExt     = R.fromListUnboxed sh $ DL.concat [sparseList x m n deltaF | x <- [0..pred numat]]
+        newForce     = computeUnboxedS $ forceVector +^ forceExt
+        numat        = dim `div` 3
         sh@(Z:. dim) = extent forceVector
 
 sparseList :: Int -> Int -> Int -> [Double] -> [Double]
